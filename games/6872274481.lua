@@ -9131,6 +9131,19 @@
 		return nil
 	end
 
+local function getPickaxeSlot()
+	for i, v in store.inventory.hotbar do
+		if v.item and bedwars.ItemMeta[v.item.itemType] then
+			local meta = bedwars.ItemMeta[v.item.itemType]
+			if meta.breakBlock then
+				return i - 1
+			end
+		end
+	end
+	return nil
+end
+
+
 	run(function()
 		local aim = 0.158
 		local tnt = 0.0045
