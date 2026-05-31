@@ -9174,7 +9174,7 @@ run(function()
         end
     end
 
-    BetterDavey = vape.Categories.Kits:CreateModule({
+    BetterDavey = vape.Categories.Minigames:CreateModule({
         Name = "BetterDavey",
         Tooltip = "makes u look better with davey makes u play like me(i main davey everyday kush)",
 		Function = function(callback)
