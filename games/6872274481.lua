@@ -2474,7 +2474,7 @@ run(function()
 				end
 			end
 		end
-		
+
 		if Mouse.Enabled then
 			if not inputService:IsMouseButtonPressed(0) then return false end
 		end
@@ -9195,14 +9195,14 @@ run(function()
 					
 						if not humanoid then return end
 					
-						if Speed.Enabled and Fly.Enabled then
-							Fly:Toggle(false)
+						if vape.Modules.Speed.Enabled and vape.Modules.Fly.Enabled then
+							vape.Modules.Fly:Toggle(false)
 							task.wait(0.025)
-							Speed:Toggle(false)
-						elseif Speed.Enabled then
-							Speed:Toggle(false)
-						elseif Fly.Enabled then
-							Fly:Toggle(false)
+							vape.Modules.Speed:Toggle(false)
+						elseif vape.Modules.Speed.Enabled then
+							vape.Modules.Speed:Toggle(false)
+						elseif vape.Modules.Fly.Enabled then
+							vape.Modules.Fly:Toggle(false)
 						end
 
 						bedwars.breakBlock(child)
