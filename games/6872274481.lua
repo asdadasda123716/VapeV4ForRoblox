@@ -778,6 +778,17 @@ local function safeGetProto(func, index)
         return nil
     end
 end
+local inventoryDebounce = false
+local function fireInventoryChanged()
+    if inventoryDebounce then return end
+    inventoryDebounce = true
+    task.spawn(function()
+        task.wait() 
+        vapeEvents.InventoryChanged:Fire()
+        inventoryDebounce = false
+    end)
+end
+
 run(function()
 	local KnitInit, Knit
 	repeat
