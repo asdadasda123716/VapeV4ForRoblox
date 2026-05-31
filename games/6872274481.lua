@@ -2309,27 +2309,20 @@ run(function()
 					task.wait(1 / UpdateRate.Value)
 				until not Killaura.Enabled
 			else
-				store.KillauraTarget = nil
-				for _, v in Boxes do
-					v.Adornee = nil
-				end
-				for _, v in Particles do
-					v.Parent = nil
-				end
-				if inputService.TouchEnabled then
-					pcall(function()
-						lplr.PlayerGui.MobileUI['2'].Visible = true
-					end)
-				end
-				debug.setupvalue(oldSwing or bedwars.SwordController.playSwordEffect, 6, bedwars.Knit)
-				debug.setupvalue(bedwars.ScytheController.playLocalAnimation, 3, bedwars.Knit)
-				Attacking = false
-				if armC0 then
-					AnimTween = tweenService:Create(gameCamera.Viewmodel.RightHand.RightWrist, TweenInfo.new(AnimationTween.Enabled and 0.001 or 0.3, Enum.EasingStyle.Exponential), {
-						C0 = armC0
-					})
-					AnimTween:Play()
-				end
+                store.KillauraTarget = nil
+                for _, v in Boxes do v.Adornee = nil end
+                for _, v in Particles do v.Parent = nil end
+                if inputService.TouchEnabled then
+                    pcall(function() lplr.PlayerGui.MobileUI['2'].Visible = true end)
+                end
+                Attacking = false
+                if armC0 then
+                    if AnimTween then AnimTween:Destroy() AnimTween = nil end
+                    AnimTween = tweenService:Create(gameCamera.Viewmodel.RightHand.RightWrist, TweenInfo.new(AnimationTween and AnimationTween.Enabled and 0.001 or 0.3, Enum.EasingStyle.Exponential), {
+                        C0 = armC0
+                    })
+                    AnimTween:Play()
+                end
 			end
 		end,
 		Tooltip = 'Attack players around you\nwithout aiming at them.'
@@ -8745,4 +8738,3 @@ run(function()
 	})
 
 end)
-
