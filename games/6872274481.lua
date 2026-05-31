@@ -3375,8 +3375,6 @@ run(function()
 									else
 										nfRakHookActive = true
 										raknet.add_send_hook(nfRakHooked)
-										task.wait(lplr:GetNetworkPing() * 100 + math.random())
-										pcall(raknet.remove_send_hook, nfRakHooked)
 									end
 								end
 							end
@@ -9131,6 +9129,16 @@ run(function()
 		List = WinEffectName
 	})
 end)
+local function getWorldFolder()
+    local Map = workspace:FindFirstChild("Map")
+    if not Map then return nil end
+    local Worlds = Map:FindFirstChild("Worlds")
+    if not Worlds then return nil end
+    for _, world in Worlds:GetChildren() do
+        return world
+    end
+    return nil
+end
 
 run(function()
     local aim = 0.158
@@ -9146,13 +9154,10 @@ run(function()
 	local L
 	local C
 	local AJ
-    local function getWorldFolder()
-        local Map = workspace:WaitForChild("Map", math.huge)
-        local Worlds = Map:WaitForChild("Worlds", math.huge)
-        if not Worlds then return nil end
+	local AS
 
-        return Worlds:GetChildren()[1] 
-    end
+	local Speed = vape.Modules.Speed
+	local Fly = vape.Modules.Fly
 
     local function setCannonSpeeds(blocksFolder, aimDur, tntDur, selfDur)
         for _, v in ipairs(blocksFolder:GetChildren()) do 
@@ -9169,60 +9174,79 @@ run(function()
         end
     end
 
-    BetterDavey = vape.Categories.Blatant:CreateModule({
+    BetterDavey = vape.Categories.Kits:CreateModule({
         Name = "BetterDavey",
-        Tooltip = "makes u look better with davey",
-        Function = function(callback) 
-            local worldFolder = getWorldFolder()
-            if not worldFolder then return end
-            local blocks = worldFolder:WaitForChild("Blocks")
+        Tooltip = "makes u look better with davey makes u play like me(i main davey everyday kush)",
+		Function = function(callback)
+			local worldFolder = getWorldFolder()
+			if not worldFolder then return end
+			local blocks = worldFolder:WaitForChild("Blocks")
+			if callback then
+				setCannonSpeeds(blocks, aim, tnt, aunchself)
 
-            if callback then
-                setCannonSpeeds(blocks, aim, tnt, aunchself)
-
-               BetterDavey:Clean( blocks.ChildAdded:Connect(function(child)
-                    if child:IsA("BasePart") and child.Name == "cannon" and BetterDavey.Enabled then
-                        local AimPrompt = child:WaitForChild("AimPrompt")
-                        local FirePrompt = child:WaitForChild("FirePrompt")
-                        local LaunchSelfPrompt = child:WaitForChild("LaunchSelfPrompt")
-
-                        AimPrompt.HoldDuration = aim
-                        FirePrompt.HoldDuration = tnt
-                        LaunchSelfPrompt.HoldDuration = aunchself
-					BetterDavey:Clean(LaunchSelfPrompt.Triggered:Connect(function(p)
-						local humanoid = entitylib.character.Humanoid
-					
-						if not humanoid then return end
-					
-						if vape.Modules.Speed.Enabled and vape.Modules.Fly.Enabled then
-							vape.Modules.Fly:Toggle(false)
-							task.wait(0.025)
-							vape.Modules.Speed:Toggle(false)
-						elseif vape.Modules.Speed.Enabled then
-							vape.Modules.Speed:Toggle(false)
-						elseif vape.Modules.Fly.Enabled then
-							vape.Modules.Fly:Toggle(false)
+				local function onLaunchTriggered(child)
+					local humanoid = entitylib.character.Humanoid
+					if not humanoid then return end
+					if Speed.Enabled and Fly.Enabled then
+						Fly:Toggle(false)
+						task.wait(0.025)
+						Speed:Toggle(false)
+					elseif Speed.Enabled then
+						Speed:Toggle(false)
+					elseif Fly.Enabled then
+						Fly:Toggle(false)
+					end
+					if AS.Enabled then
+						local pickaxe = getPickaxeSlot()
+						if hotbarSwitch(pickaxe) or store.hand.tool.Name:lower():find("pickaxe") then
+							task.spawn(bedwars.breakBlock, child, false, nil, true)
+							task.spawn(bedwars.breakBlock, child, false, nil, true)
 						end
-
-						bedwars.breakBlock(child)
-
-						if AJ.Enabled then
-							if humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
-								humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-							end
+					else
+						task.spawn(bedwars.breakBlock, child, false, nil, true)
+						task.spawn(bedwars.breakBlock, child, false, nil, true)
+					end
+					if AJ.Enabled then
+						if humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
+							humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 						end
+					end
+				end
+
+				local function setupCannon(child)
+					if not (child:IsA("BasePart") and child.Name == "cannon" and BetterDavey.Enabled) then return end
+					local AimPrompt = child:WaitForChild("AimPrompt")
+					local FirePrompt = child:WaitForChild("FirePrompt")
+					local LaunchSelfPrompt = child:WaitForChild("LaunchSelfPrompt")
+					AimPrompt.HoldDuration = aim
+					FirePrompt.HoldDuration = tnt
+					LaunchSelfPrompt.HoldDuration = aunchself
+					BetterDavey:Clean(LaunchSelfPrompt.Triggered:Connect(function()
+						onLaunchTriggered(child)
 					end))
-                    end
-                end))
-            else
-                setCannonSpeeds(blocks, defaultaim, defaulttnt, defaultself)
-            end
-        end
+				end
+
+				BetterDavey:Clean(blocks.ChildAdded:Connect(setupCannon))
+
+				for _, child in blocks:GetChildren() do
+					setupCannon(child)
+				end
+			else
+				setCannonSpeeds(blocks, defaultaim, defaulttnt, defaultself)
+			end
+		end
     })
+
 	AJ = BetterDavey:CreateToggle({
 		Name = "Auto-Jump",
-		Default = true																																																						
-	})																																																					
+		Default = true																																																						,
+				Visible = true
+	})	
+	AS = BetterDavey:CreateToggle({
+		Name = "Auto-Switch",
+		Default = false																																																						,
+				Visible = true
+	})																																																				
 	A = BetterDavey:CreateSlider({
 		Name = "Aim",
 		Visible = false,
@@ -9274,6 +9298,7 @@ run(function()
 	C = BetterDavey:CreateToggle({
 		Name = "Customize",
 		Default = false,
+				Visible = true,
 		Function = function(v)
 			A.Object.Visible = v
 			T.Object.Visible = v
