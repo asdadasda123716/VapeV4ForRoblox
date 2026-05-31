@@ -44,21 +44,31 @@ local getfontsize = vape.Libraries.getfontsize
 local getcustomasset = vape.Libraries.getcustomasset
 
 local store = {
-	attackReach = 0,
-	attackReachUpdate = tick(),
-	damageBlockFail = tick(),
-	hand = {},
-	inventory = {
-		inventory = {
-			items = {},
-			armor = {}
-		},
-		hotbar = {}
-	},
-	inventories = {},
-	matchState = 0,
-	queueType = 'bedwars_test',
-	tools = {}
+    attackReach = 0,
+    attackReachUpdate = tick(),
+    damageBlockFail = tick(),
+    hand = {},
+    inventory = {
+        inventory = {
+            items = {},
+            armor = {}
+        },
+        hotbar = {}
+    },
+    inventories = setmetatable({}, { __mode = "k" }), 
+    matchState = 0,
+    queueType = 'bedwars_test',
+    tools = {},
+    lastToolUpdate = 0,
+	lastKrystalUpdateCheck = 0,
+	BedAlarmNotifyTick = 0,
+	BedAlarmIsTrigged = false,
+	BedAlarmHighlightedEnimes = {},
+	BedAlarm = {},
+	BedAlarmSoundTick = 0,
+	silasAbilityTime = 0,
+	terraStompTime = 0,
+	terraKickTime = 0,
 }
 local Reach = {}
 local HitBoxes = {}
