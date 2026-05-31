@@ -3218,9 +3218,6 @@ run(function()
 		buffer.writef32(data, 29, 0)
 		buffer.writef32(data, 33, 0)
 		packet:SetData(data)
-		task.wait(lplr:GetNetworkPing() * 100 + math.random())
-		print('removed')
-		pcall(raknet.remove_send_hook, nfRakHooked)
 	end
 
 	local nfRayParams = RaycastParams.new()
@@ -3378,6 +3375,8 @@ run(function()
 									else
 										nfRakHookActive = true
 										raknet.add_send_hook(nfRakHooked)
+										task.wait(lplr:GetNetworkPing() * 100 + math.random())
+										pcall(raknet.remove_send_hook, nfRakHooked)
 									end
 								end
 							end
