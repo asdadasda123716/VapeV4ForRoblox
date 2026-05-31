@@ -1056,15 +1056,6 @@ run(function()
 						attackTable.validate.selfPosition.value += CFrame.lookAt(selfpos, targetpos).LookVector * math.max((selfpos - targetpos).Magnitude - 14.399, 0)
 					end
 
-					if suc and plr then
-						if getAccountTier(lplr) == 0 and getAccountTier(plr) <= 4 then
-							return
-						end
-						if getAccountTier(plr) >= 99 and getAccountTier(lplr) >= 4 then
-							return
-						end
-					end
-
 					return call:SendToServer(attackTable, ...)
 				end
 			}
@@ -1075,37 +1066,12 @@ run(function()
 		return call
 	end
 
-	local bedtms = {}
 
 	bedwars.BlockController.isBlockBreakable = function(self, breakTable, plr)
 		local obj = bedwars.BlockController:getStore():getBlockAt(breakTable.blockPosition)
 
-		if obj and (obj.Name == 'bed') then
-			local lplrtiers = getAccountTier(plr or lplr) or 0
-			local teambed = obj:GetAttribute('TeamId') or obj:GetAttribute('Team') or 0
-			for _, plrs in playersService:GetPlayers() do
-				local char = plrs.Character
-				if char then
-					local team = char:GetAttribute('Team') or char:GetAttribute('TeamId') or 0
-					if team == teambed then
-						table.insert(bedtms,{plr=plrs,tier=getAccountTier(plrs) or 0})
-					end
-				end
-			end
-			for _, v in bedtms do
-				if v.tier then
-					if v.tier >= 2 and v.tier < 5 and lplrtiers == 0 then
-						return false
-					elseif v.tier >= 99 and lplrtiers <= 4 then
-						return false
-					elseif v.tier >= 99 and lplrtiers >= 99 then
-						return OldBreak(self, breakTable, plr)
-					else
-						return OldBreak(self, breakTable, plr)
-					end
-				end
-			end
-			table.clear(bedtms)
+		if shared.debug then
+			print('breaking',(obj and obj.Name or 'nil'))
 		end
 
 		return OldBreak(self, breakTable, plr)
@@ -1118,7 +1084,6 @@ run(function()
 			task.wait(60)
 			if vape.Loaded then
 				table.clear(cache)
-				table.clear(bedtms)
 			end
 		end
 	end)
@@ -1543,6 +1508,50 @@ run(function()
 		table.clear(lagConnections)
 	end)
 end)
+
+local function isFrozen(entity, threshold)
+    threshold = threshold or 10
+    local char
+    if type(entity) == "table" and entity.Character then
+        char = entity.Character
+    elseif type(entity) == "Instance" and entity:IsA("Model") then
+        char = entity
+    elseif entity == nil then
+        if not entitylib.isAlive then return false end
+        char = entitylib.character.Character
+    else
+        return false
+    end
+
+    local stacks = char:GetAttribute("ColdStacks") or char:GetAttribute("FrostStacks")
+               or char:GetAttribute("FreezeStacks") or char:GetAttribute("FROZEN_STACKS")
+    if stacks and stacks >= threshold then return true end
+
+    local statusEffects = char:GetAttribute("StatusEffects")
+    if type(statusEffects) == "table" then
+        for effectName, stackCount in pairs(statusEffects) do
+            local nameLower = tostring(effectName):lower()
+            if nameLower:match("cold") or nameLower:match("frost") or nameLower:match("freeze") then
+                if type(stackCount) == "number" then
+                    if stackCount >= threshold then return true end
+                elseif stackCount then
+                    return true
+                end
+            end
+        end
+    end
+
+    if char:FindFirstChild("IceBlock") or char:FindFirstChild("FrozenBlock") or char:FindFirstChild("IceShell") then
+        return true
+    end
+
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.WalkSpeed <= 2 then
+        return true
+    end
+
+    return false
+end
 
 for _, v in {'AntiRagdoll', 'TriggerBot', 'SilentAim', 'AutoRejoin', 'Rejoin', 'Disabler', 'Timer', 'ServerHop', 'MouseTP', 'MurderMystery'} do
 	vape:Remove(v)
@@ -2449,11 +2458,23 @@ run(function()
 	local Particles, Boxes = {}, {}
 	local anims, AnimDelay, AnimTween, armC0 = vape.Libraries.auraanims, tick()
 	local AttackRemote = {FireServer = function() end}
+	local kitChecks
+	local AttackCheck
 	task.spawn(function()
 		AttackRemote = bedwars.Client:Get(remotes.AttackEntity).instance
 	end)
 
 	local function getAttackData()
+		if AttackCheck and AttackCheck.Enabled then
+			local stunTime = lplr.Character and lplr.Character:GetAttribute('StunnedUntilTime')
+			if stunTime and stunTime > workspace:GetServerTimeNow() then return false end
+			if kitChecks then
+				for _, check in pairs(kitChecks) do
+					if check() then return false end
+				end
+			end
+		end
+		
 		if Mouse.Enabled then
 			if not inputService:IsMouseButtonPressed(0) then return false end
 		end
@@ -2545,6 +2566,27 @@ run(function()
 
 				local swingCooldown = 0
 				repeat
+					if AttackCheck and AttackCheck.Enabled then
+						local stunTime = lplr.Character and lplr.Character:GetAttribute('StunnedUntilTime')
+						if stunTime and stunTime > workspace:GetServerTimeNow() then
+							Attacking = false
+							store.KillauraTarget = nil
+							task.wait(0.3)
+							continue
+						end
+						if kitChecks then
+							local blocked = false
+							for _, check in pairs(kitChecks) do
+								if check() then blocked = true break end
+							end
+							if blocked then
+								Attacking = false
+								store.KillauraTarget = nil
+								task.wait(0.3)
+								continue
+							end
+						end
+					end
 					local attacked, sword, meta = {}, getAttackData()
 					Attacking = false
 					store.KillauraTarget = nil
@@ -2727,6 +2769,16 @@ run(function()
 	Mouse = Killaura:CreateToggle({Name = 'Require mouse down'})
 	Swing = Killaura:CreateToggle({Name = 'No Swing'})
 	GUI = Killaura:CreateToggle({Name = 'GUI check'})
+    kitChecks = {
+        ['Sophia'] = function() return isFrozen(nil, FROZEN_THRESHOLD) end,
+        ['Sigrid'] = function() return entitylib.isAlive and lplr.Character and lplr.Character:FindFirstChild('elk') ~= nil end,
+    }
+    AttackCheck = Killaura:CreateToggle({
+        Name = 'Attack Check',
+        Tooltip = 'Stops Killaura when a kit ability is detected (Sophia, etc) or when asleep',
+        Function = function(callback) end,
+        Default = false
+    })
 	Killaura:CreateToggle({
 		Name = 'Show target',
 		Function = function(callback)
@@ -3166,6 +3218,8 @@ run(function()
 		buffer.writef32(data, 29, 0)
 		buffer.writef32(data, 33, 0)
 		packet:SetData(data)
+		task.wait(lplr:GetNetworkPing() * 10)
+		print('removed')
 		pcall(raknet.remove_send_hook, nfRakHooked)
 	end
 
