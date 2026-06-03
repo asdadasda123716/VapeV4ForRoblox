@@ -1,4 +1,5 @@
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
+--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 	local run = function(func)
 		func()
 	end
@@ -3225,7 +3226,7 @@
 				if callback then
 					if rakNetCheck('NoFall') then
 						NoFall:Clean(lplr.Character.Humanoid.StateChanged:Connect(function(old, new)
-							if new == Enum.HumanoidStateType.FallingDown or new == Enum.HumanoidStateType.Freefall then
+							if new == Enum.HumanoidStateType.FallingDown or new == Enum.HumanoidStateType.Freefall or new == Enum.HumanoidStateType.Jumping then
 								raknet.add_send_hook(func)
 							else
 								task.wait(lplr:GetNetworkPing() or 0.1 + 0.05)
