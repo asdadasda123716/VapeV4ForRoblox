@@ -1,3 +1,4 @@
+--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 	local run = function(func)
 		func()
 	end
@@ -3192,10 +3193,9 @@
 		})
 	end)
 		
+
 	run(function()
 		local NoFall
-		local NoFallMethod
-		local LimitToItems
 		local HealthCheck
 		local HealthThreshold
 
@@ -3207,8 +3207,7 @@
 			return true
 		end
 
-		local nfRakHookActive = false
-		local function nfRakHooked(packet)
+		local function func(packet)
 			if packet.AsArray[1] ~= 0x1b then return end
 			local data = packet.AsBuffer
 			buffer.writef32(data, 13, 0)
@@ -3220,217 +3219,29 @@
 			packet:SetData(data)
 		end
 
-		local nfRayParams = RaycastParams.new()
-		nfRayParams.FilterType = Enum.RaycastFilterType.Blacklist
-
-		local nfScanParams = RaycastParams.new()
-		nfScanParams.FilterType = Enum.RaycastFilterType.Exclude
-		nfScanParams.RespectCanCollide = true
-
-		local nfProjectileRemote = {InvokeServer = function() end}
-		task.spawn(function()
-			nfProjectileRemote = bedwars.Client:Get(remotes.FireProjectile).instance
-		end)
-
-		local function nfGetPearlSlot()
-			for i, v in store.inventory.hotbar do
-				if v.item and v.item.itemType == 'telepearl' then
-					return i - 1, v.item
-				end
-			end
-			return nil, nil
-		end
-
-		local function nfIsHoldingPearl()
-			if not entitylib.isAlive then return false end
-			local hand = store.inventory and store.inventory.inventory and store.inventory.inventory.hand
-			return hand and hand.itemType == 'telepearl'
-		end
-
-		local function nfThrowPearl(pos, spot, pearlTool)
-			local meta = bedwars.ProjectileMeta.telepearl
-			local offsets = {Vector3.new(0,-1.5,0), Vector3.new(0,0,0), Vector3.new(0,1,0), Vector3.new(0,-3,0)}
-			local calc
-			for _, offset in offsets do
-				calc = prediction.SolveTrajectory(pos, meta.launchVelocity, meta.gravitationalAcceleration, spot + offset, Vector3.zero, workspace.Gravity, 0, 0, nil, false, lplr:GetNetworkPing())
-				local targetRoot = plr.RootPart
-							if targetRoot then
-								local targetRootVel = targetRoot.AssemblyLinearVelocity or targetRoot.Velocity or Vector3.zero
-								local targetMovingUp = targetRootVel.Y > 3
-								local heightDiff = aimTarget.Y - newlook.p.Y
-								if targetMovingUp then
-									aimTarget = aimTarget + Vector3.new(0, math.clamp(targetRootVel.Y * 0.08, 0.5, 3.5), 0)
-								elseif heightDiff < -8 then
-									aimTarget = aimTarget + Vector3.new(0, math.clamp(math.abs(heightDiff) * 0.04, 0.3, 2.5), 0)
-								end
-							end
-							if calc then break end
-			end
-			if not calc then return false end
-			local dir = CFrame.lookAt(pos, calc).LookVector * meta.launchVelocity
-			nfProjectileRemote:InvokeServer(pearlTool, 'telepearl', 'telepearl', pos, pos, dir, httpService:GenerateGUID(true), {drawDurationSeconds = 1, shotId = httpService:GenerateGUID(false)}, workspace:GetServerTimeNow() - 0.045)
-			return true
-		end
-
-		local function nfIsValidSpot(pos)
-			local headCheck = workspace:Raycast(pos + Vector3.new(0,0.1,0), Vector3.new(0,3,0), nfScanParams)
-			if headCheck then return false end
-			local groundCheck = workspace:Raycast(pos + Vector3.new(0,0.5,0), Vector3.new(0,-2,0), nfScanParams)
-			return groundCheck ~= nil
-		end
-
-		local function nfFindSpot(origin)
-			local char = lplr.Character
-			if not char then return nil end
-			nfScanParams.FilterDescendantsInstances = {char, gameCamera}
-			local downRay = workspace:Raycast(origin, Vector3.new(0, -200, 0), nfScanParams)
-			if not downRay then return nil end
-			local spot = downRay.Position + Vector3.new(0, 0.1, 0)
-			if not nfIsValidSpot(spot) then return nil end
-			return spot
-		end
-
-		local function nfDoPearl(pos, spot)
-			local pearlSlot, pearlItem = nfGetPearlSlot()
-			if not pearlSlot or not pearlItem then return end
-			if LimitToItems.Enabled then
-				if not nfIsHoldingPearl() then return end
-				nfThrowPearl(pos, spot, pearlItem.tool)
-				return
-			end
-			local originalSlot = store.inventory.hotbarSlot
-			if nfIsHoldingPearl() then
-				nfThrowPearl(pos, spot, pearlItem.tool)
-			else
-				hotbarSwitch(pearlSlot)
-				task.wait(0.05)
-				nfThrowPearl(pos, spot, pearlItem.tool)
-				task.wait(0.05)
-				hotbarSwitch(originalSlot)
-			end
-		end
-
 		NoFall = vape.Categories.Blatant:CreateModule({
 			Name = 'NoFall',
-			Tooltip = '[BETA]',
 			Function = function(callback)
 				if callback then
-					local fallStartY = nil
-					local pearlFired = false
-					local cooldown = 0
-					local pearlCountAtFallStart = nil
-					local manualThrowTime = nil
-					nfRayParams.FilterDescendantsInstances = {lplr.Character, gameCamera}
-					repeat
-						if entitylib.isAlive then
-							local root = entitylib.character.RootPart
-							local velY = root.AssemblyLinearVelocity.Y
-							local falling = velY < -10
-							local currentTime = tick()
-							local pearl = getItem('telepearl')
-							local currentPearlCount = pearl and pearl.amount or 0
-
-							if not falling then
-								fallStartY = nil
-								pearlFired = false
-								pearlCountAtFallStart = nil
-								manualThrowTime = nil
+					if rakNetCheck('NoFall') then
+						NoFall:Clean(lplr.Character.Humanoid.StateChanged:Connect(function(old, new)
+							if new == Enum.HumanoidStateType.FallingDown or new == Enum.HumanoidStateType.Freefall then
+								raknet.add_send_hook(func)
 							else
-								if not fallStartY then
-									fallStartY = root.Position.Y
-									pearlCountAtFallStart = currentPearlCount
-								end
+								task.wait(lplr:GetNetworkPing() or 0.1 + 0.05)
+								pcall(raknet.remove_send_hook, func)
 							end
-
-							if pearlCountAtFallStart ~= nil and currentPearlCount < pearlCountAtFallStart and not pearlFired then
-								manualThrowTime = currentTime
-								pearlCountAtFallStart = currentPearlCount
-							end
-
-							local blockedByManual = manualThrowTime and (currentTime - manualThrowTime) < 3
-
-							local fallHeight = fallStartY and ((fallStartY - root.Position.Y) / 3) or 0
-							local groundRay = workspace:Raycast(root.Position, Vector3.new(0, -99935, 0), nfRayParams)
-
-							local healthOk = true
-							if HealthCheck and HealthCheck.Enabled then
-								local hp = lplr.Character:GetAttribute('Health') or 100
-								healthOk = hp <= (HealthThreshold and HealthThreshold.Value or 50)
-							end
-							if falling and groundRay and fallHeight >= 7 and not pearlFired and not blockedByManual and (currentTime - cooldown) > 1 and healthOk then
-								local method = NoFallMethod and NoFallMethod.Value or 'TelePearl'
-								if method == 'TelePearl' then
-									if pearl then
-										pearlFired = true
-										cooldown = currentTime
-										local spot = nfFindSpot(root.Position)
-										if spot then
-											task.spawn(nfDoPearl, root.Position, spot)
-										end
-									end
-								elseif method == 'Raknet' then
-									if not nfRakHookActive then
-										if not rakNetCheck(NoFall) then
-											NoFallMethod.Value = 'TelePearl'
-										else
-											nfRakHookActive = true
-											raknet.add_send_hook(nfRakHooked)
-										end
-									end
-								end
-							end
-						end
-						task.wait(0.05)
-					until not NoFall.Enabled
-				else
-					if nfRakHookActive then
-						pcall(raknet.remove_send_hook, nfRakHooked)
-						nfRakHookActive = false
+						end))
+					else
+						vape:Remove('NoFall')
 					end
+				else
+					pcall(raknet.remove_send_hook, func)
 				end
 			end
-		})
-
-		NoFallMethod = NoFall:CreateDropdown({
-			Name = 'Method',
-			List = raknet and raknet.add_send_hook and {'TelePearl', 'Raknet'} or {'TelePearl'},
-			Default = 'TelePearl',
-			Tooltip = 'more coming!!',
-			Function = function(v)
-				if LimitToItems then
-					LimitToItems.Object.Visible = v == 'TelePearl'
-				end
-				if v ~= 'Raknet' and nfRakHookActive then
-					pcall(raknet.remove_send_hook, nfRakHooked)
-					nfRakHookActive = false
-				end
-			end
-		})
-
-		LimitToItems = NoFall:CreateToggle({
-			Name = 'Limit to Pearl',
-			Default = false,
-			Tooltip = 'Only pearls when already holding pearl'
-		})
-		HealthCheck = NoFall:CreateToggle({
-			Name = 'HP Threshold',
-			Default = false,
-			Tooltip = 'Only pearls when HP is at or below the set value',
-			Function = function(callback)
-				if HealthThreshold and HealthThreshold.Object then
-					HealthThreshold.Object.Visible = callback
-				end
-			end
-		})
-		HealthThreshold = NoFall:CreateSlider({
-			Name = 'Health',
-			Min = 1,
-			Max = 100,
-			Default = 50,
-			Suffix = 'hp',
-			Visible = false
 		})
 	end)
+
 		
 	run(function()
 		local old
@@ -9316,3 +9127,257 @@ end
 		})
 
 	end)
+
+
+run(function()
+    local KitRender
+    local Players = playersService
+    local player = Players.LocalPlayer
+    local PlayerGui = player:WaitForChild("PlayerGui")
+
+    local activeLoops = {}
+    local updateDebounce = {}
+    local retryThread = nil
+
+    local function createkitrender(plr)
+        local icon = Instance.new("ImageLabel")
+        icon.Name = "soryedKitRender" 
+        icon.AnchorPoint = Vector2.new(1, 0.5)
+        icon.BackgroundTransparency = 1
+        icon.Position = UDim2.new(1.05, 0, 0.5, 0)
+        icon.Size = UDim2.new(1.5, 0, 1.5, 0)
+        icon.SizeConstraint = Enum.SizeConstraint.RelativeYY
+        icon.ImageTransparency = 0.4
+        icon.ScaleType = Enum.ScaleType.Crop
+        local uar = Instance.new("UIAspectRatioConstraint")
+        uar.AspectRatio = 1
+        uar.AspectType = Enum.AspectType.FitWithinMaxSize
+        uar.DominantAxis = Enum.DominantAxis.Width
+        uar.Parent = icon
+		local kit = plr:GetAttribute("PlayingAsKits")
+		local meta = bedwars.BedwarsKitMeta and (bedwars.BedwarsKitMeta[kit] or bedwars.BedwarsKitMeta.none)
+        local newImage = (meta and meta.renderImage) or kitImageIds[kit] or kitImageIds["none"]
+		icon.Image = newImage
+        return icon
+    end
+
+    local function removeallkitrenders()
+        for key, _ in pairs(activeLoops) do
+            activeLoops[key] = nil
+        end
+        table.clear(updateDebounce)
+        
+        if retryThread then
+            task.cancel(retryThread)
+            retryThread = nil
+        end
+        
+        for _, v in ipairs(PlayerGui:GetDescendants()) do
+            if v:IsA("ImageLabel") and v.Name == "soryedKitRender" then  
+                v:Destroy()
+            end
+        end
+    end
+
+    local function refreshicon(icon, plr)
+        if not icon or not icon.Parent then return end
+        local kit = plr:GetAttribute("PlayingAsKits")
+        local meta = bedwars.BedwarsKitMeta and (bedwars.BedwarsKitMeta[kit] or bedwars.BedwarsKitMeta.none)
+        local newImage = (meta and meta.renderImage) or kitImageIds[kit] or kitImageIds["none"]
+        if icon.Image ~= newImage then
+            icon.Image = newImage
+        end
+    end
+
+    local function findPlayer(label, container)
+        local render = container:FindFirstChild("PlayerRender", true)
+        if render and render:IsA("ImageLabel") and render.Image then
+            local userId = string.match(render.Image, "id=(%d+)")
+            if userId then
+                local plr = Players:GetPlayerByUserId(tonumber(userId))
+                if plr then return plr end
+            end
+        end
+        local text = label.Text
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Name == text or plr.DisplayName == text or plr:GetAttribute("DisguiseDisplayName") == text then
+                return plr
+            end
+            local smName = nil
+            pcall(function()
+                smName = bedwars.KnitClient.Controllers.StreamerModeController:getDisplayName(plr)
+            end)
+            if smName and smName == text then
+                return plr
+            end
+        end
+    end
+
+    local function handleLabel(label)
+        if not (label:IsA("TextLabel") and label.Name == "PlayerName") then return end
+        task.spawn(function()
+            local container = label.Parent
+            for _ = 1, 3 do
+                if container and container.Parent then
+                    container = container.Parent
+                end
+            end
+            if not container or not container:IsA("Frame") then return end
+            
+            local playerFound = findPlayer(label, container)
+            if not playerFound then
+                task.wait(0.5)
+                playerFound = findPlayer(label, container)
+            end
+            if not playerFound then return end
+            if getAccountTier(playerFound) >= 4 and getAccountTier(lplr) == 0 then return end
+            local myTeam = lplr:GetAttribute('Team')
+            local theirTeam = playerFound:GetAttribute('Team')
+            if not myTeam or not theirTeam or myTeam == theirTeam then return end
+            
+            container.Name = playerFound.Name
+            local card = container:FindFirstChild("1") and container["1"]:FindFirstChild("MatchDraftPlayerCard")
+            if not card then return end
+            
+            local icon = card:FindFirstChild("soryedKitRender")  
+            if not icon then
+                icon = createkitrender(playerFound)
+                icon.Parent = card
+            end
+            
+            local loopKey = playerFound.UserId
+            if activeLoops[loopKey] then
+                activeLoops[loopKey] = nil
+            end
+            activeLoops[loopKey] = true
+			task.spawn(function()
+				while activeLoops[loopKey] and KitRender.Enabled do
+					if not container or not container.Parent then
+						break
+					end
+					if playerFound and icon and icon.Parent then
+						refreshicon(icon, playerFound)
+					end
+					task.wait(0.3)
+				end
+				activeLoops[loopKey] = nil
+				updateDebounce[loopKey] = nil
+			end)
+        end)
+    end
+
+    local activeConnections = {}
+    local kitLabels = {}
+    local squadUpdateDebounce = {}
+    local processedPlayers = {}
+
+    local function createKitLabel(parent, kitImage)
+        if kitLabels[parent] then kitLabels[parent]:Destroy() end
+        local kitLabel = Instance.new("ImageLabel")
+        kitLabel.Name = "soryedKitIcon"
+        kitLabel.Size = UDim2.new(1, 0, 1, 0)
+        kitLabel.Position = UDim2.new(1.1, 0, 0, 0)
+        kitLabel.BackgroundTransparency = 1
+        kitLabel.Image = kitImage
+        kitLabel.Parent = parent
+        kitLabels[parent] = kitLabel
+        return kitLabel
+    end
+
+    local function setupSquadsKitRender(obj)
+        if obj.Name == "PlayerRender" and obj.Parent and obj.Parent.Parent and obj.Parent.Parent.Parent and obj.Parent.Parent.Parent.Parent and obj.Parent.Parent.Parent.Parent.Parent and obj.Parent.Parent.Parent.Parent.Parent.Name == "MatchDraftTeamCardRow" then
+            local Rank = obj.Parent:FindFirstChild('3')
+            if not Rank then return end
+            local userId = string.match(obj.Image, "id=(%d+)")
+            if not userId then return end
+            local plr = playersService:GetPlayerByUserId(tonumber(userId))
+            if not plr then return end
+            if getAccountTier(plr) >= 4 and getAccountTier(lplr) == 0 then return end
+            local myTeam = lplr:GetAttribute('Team')
+            local theirTeam = plr:GetAttribute('Team')
+            if not myTeam or not theirTeam or myTeam == theirTeam then return end
+            local loopKey = plr.UserId
+            processedPlayers[loopKey] = true
+            if activeConnections[loopKey] then activeConnections[loopKey]:Disconnect() activeConnections[loopKey] = nil end
+            local function updateKit()
+                if not KitRender.Enabled then return end
+                if not Rank or not Rank.Parent then
+                    if activeConnections[loopKey] then activeConnections[loopKey]:Disconnect() activeConnections[loopKey] = nil end
+                    if kitLabels[Rank] then kitLabels[Rank]:Destroy() kitLabels[Rank] = nil end
+                    return
+                end
+                local kitName = plr:GetAttribute("PlayingAsKits") or "none"
+                local render = bedwars.BedwarsKitMeta[kitName] or bedwars.BedwarsKitMeta.none
+                if kitLabels[Rank] then kitLabels[Rank].Image = render.renderImage
+                else createKitLabel(Rank, render.renderImage) end
+            end
+            updateKit()
+            local connection = plr:GetAttributeChangedSignal("PlayingAsKits"):Connect(function()
+                local t = tick()
+                if not squadUpdateDebounce[loopKey] or (t - squadUpdateDebounce[loopKey]) >= 0.1 then
+                    squadUpdateDebounce[loopKey] = t
+                    updateKit()
+                end
+            end)
+            activeConnections[loopKey] = connection
+            KitRender:Clean(connection)
+        end
+    end
+
+    local function setupSquadsRender()
+        local teams = lplr.PlayerGui:FindFirstChild("MatchDraftApp")
+        if not teams then return false end
+        task.wait(0.5)
+        for _, obj in teams:GetDescendants() do
+            if KitRender.Enabled then task.spawn(function() setupSquadsKitRender(obj) end) end
+        end
+        KitRender:Clean(teams.DescendantAdded:Connect(function(obj)
+            if KitRender.Enabled then task.wait(0.1) setupSquadsKitRender(obj) end
+        end))
+        return true
+    end
+
+    local function removeSquadsRender()
+        for key, connection in pairs(activeConnections) do
+            if connection then connection:Disconnect() end
+            activeConnections[key] = nil
+        end
+        for parent, label in pairs(kitLabels) do
+            if label then label:Destroy() end
+            kitLabels[parent] = nil
+        end
+        table.clear(squadUpdateDebounce)
+        table.clear(processedPlayers)
+    end
+
+    local function setupKitRender()
+        local draftApp = PlayerGui:FindFirstChild("MatchDraftApp")
+        if not draftApp then return false end
+
+        for _, child in ipairs(draftApp:GetDescendants()) do
+            if KitRender.Enabled then handleLabel(child) end
+        end
+
+        KitRender:Clean(draftApp.DescendantAdded:Connect(function(child)
+            if KitRender.Enabled then handleLabel(child) end
+        end))
+
+        return true
+    end
+
+    KitRender = vape.Categories.Utility:CreateModule({
+        Name = "KitRender",
+        Tooltip = "Shows everyone's kit during kit phase (for 5v5 or Squads)",
+        Function = function(callback)
+            if callback then
+                local draftApp = lplr.PlayerGui:FindFirstChild("MatchDraftApp")
+                local isSquads = draftApp and draftApp:FindFirstChild("MatchDraftTeamCardRow", true) ~= nil
+                local setupFn = isSquads and setupSquadsRender or setupKitRender
+				setupFn()
+            else
+                removeallkitrenders()
+                removeSquadsRender()
+            end
+        end
+    })
+end)
