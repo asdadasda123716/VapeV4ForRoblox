@@ -10452,7 +10452,7 @@ run(function()
     	local BodyContainer = Background and Background:FindFirstChild('1') and Background['1']:FindFirstChild('BodyContainer')
     	local hooked = false
 
-    	local i = 2
+	    	local i = 2
     		local dtc = BodyContainer and BodyContainer:FindFirstChild('Team'..i..'Column')
     		if dtc then
     			hooked = true
@@ -10470,7 +10470,6 @@ run(function()
     				end
     			end
     		end
-    	end
 
     	if not hooked then
     		for _, label in DraftApp:GetDescendants() do
