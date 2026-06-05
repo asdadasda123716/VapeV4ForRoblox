@@ -10453,7 +10453,7 @@ run(function()
     	local hooked = false
 
     	local i = 2
-    		local dtc = BodyContainer and BodyContainer:FindFirstChild('Team'..i or 2..'Column')
+    		local dtc = BodyContainer and BodyContainer:FindFirstChild('Team'..i..'Column')
     		if dtc then
     			hooked = true
     			KitRender:Clean(dtc.ChildAdded:Connect(function(child)
