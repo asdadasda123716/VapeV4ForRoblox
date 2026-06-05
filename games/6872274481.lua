@@ -1,5 +1,6 @@
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
+--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 	local run = function(func)
 		func()
 	end
@@ -790,7 +791,28 @@
 			inventoryDebounce = false
 		end)
 	end
+	local function getWorldFolder()
+		local Map = workspace:FindFirstChild("Map")
+		if not Map then return nil end
+		local Worlds = Map:FindFirstChild("Worlds")
+		if not Worlds then return nil end
+		for _, world in Worlds:GetChildren() do
+			return world
+		end
+		return nil
+	end
 
+local function getPickaxeSlot()
+	for i, v in store.inventory.hotbar do
+		if v.item and bedwars.ItemMeta[v.item.itemType] then
+			local meta = bedwars.ItemMeta[v.item.itemType]
+			if meta.breakBlock then
+				return i - 1
+			end
+		end
+	end
+	return nil
+end
 	run(function()
 		local KnitInit, Knit
 		repeat
@@ -913,6 +935,75 @@
 				return rawget(self, ind)
 			end
 		})
+
+		local function createMethodHook(object, method)
+			local original = object[method]
+			local hooks, order = {}, 0
+			local wrapper
+
+			local function sync()
+				if #hooks > 0 then
+					object[method] = wrapper
+				elseif object[method] == wrapper then
+					object[method] = original
+				end
+			end
+
+			wrapper = function(...)
+				local index = 0
+				local function nextHook(...)
+					index += 1
+					local hook = hooks[index]
+					if hook then
+						return hook.Callback(nextHook, ...)
+					end
+					return original(...)
+				end
+				return nextHook(...)
+			end
+
+			return {
+				Add = function(_, id, priority, callback)
+					for i = #hooks, 1, -1 do
+						if hooks[i].Id == id then
+							table.remove(hooks, i)
+						end
+					end
+
+					order += 1
+					local entry = {
+						Id = id,
+						Priority = priority or 100,
+						Order = order,
+						Callback = callback,
+					}
+
+					table.insert(hooks, entry)
+					table.sort(hooks, function(a, b)
+						return a.Priority == b.Priority and a.Order < b.Order or a.Priority < b.Priority
+					end)
+					sync()
+
+					return function()
+						for i = #hooks, 1, -1 do
+							if hooks[i] == entry then
+								table.remove(hooks, i)
+							end
+						end
+						sync()
+					end
+				end,
+				Destroy = function()
+					table.clear(hooks)
+					sync()
+				end,
+			}
+		end
+
+		bedwars.ProjectileLaunchHook = createMethodHook(bedwars.ProjectileController, 'calculateImportantLaunchValues')
+		vape:Clean(function()
+			bedwars.ProjectileLaunchHook:Destroy()
+		end)
 
 		getgenv().bedwars = bedwars
 
@@ -1643,61 +1734,7 @@
 		StrafeIncrease = AimAssist:CreateToggle({Name = 'Strafe increase'})
 	end)
 		
-	run(function()
-		local old
-		
-		AutoCharge = vape.Categories.Combat:CreateModule({
-			Name = 'AutoCharge',
-			Function = function(callback)
-				debug.setconstant(bedwars.SwordController.attackEntity, 58, callback and 'damage' or 'multiHitCheckDurationSec')
-				if callback then
-					local chargeSwingTime = 0
-					local canSwing
-		
-					old = bedwars.SwordController.sendServerRequest
-					bedwars.SwordController.sendServerRequest = function(self, ...)
-						if (os.clock() - chargeSwingTime) < AutoChargeTime.Value then return end
-						self.lastSwingServerTimeDelta = 0.5
-						chargeSwingTime = os.clock()
-						canSwing = true
-		
-						local item = self:getHandItem()
-						if item and item.tool then
-							self:playSwordEffect(bedwars.ItemMeta[item.tool.Name], false)
-						end
-		
-						return old(self, ...)
-					end
-		
-					oldSwing = bedwars.SwordController.playSwordEffect
-					bedwars.SwordController.playSwordEffect = function(...)
-						if not canSwing then return end
-						canSwing = false
-						return oldSwing(...)
-					end
-				else
-					if old then
-						bedwars.SwordController.sendServerRequest = old
-						old = nil
-					end
-		
-					if oldSwing then
-						bedwars.SwordController.playSwordEffect = oldSwing
-						oldSwing = nil
-					end
-				end
-			end,
-			Tooltip = 'Allows you to get charged hits while spam clicking.'
-		})
-		AutoChargeTime = AutoCharge:CreateSlider({
-			Name = 'Charge Time',
-			Min = 0,
-			Max = 0.5,
-			Default = 0.4,
-			Decimal = 100
-		})
-	end)
-		
+
 	run(function()
 		local AutoClicker
 		local CPS
@@ -3272,77 +3309,6 @@
 			end,
 			Tooltip = 'Prevents slowing down when using items.'
 		})
-	end)
-
-
-
-	local function createMethodHook(object, method)
-		local original = object[method]
-		local hooks, order = {}, 0
-		local wrapper
-
-		local function sync()
-			if #hooks > 0 then
-				object[method] = wrapper
-			elseif object[method] == wrapper then
-				object[method] = original
-			end
-		end
-
-		wrapper = function(...)
-			local index = 0
-			local function nextHook(...)
-				index += 1
-				local hook = hooks[index]
-				if hook then
-					return hook.Callback(nextHook, ...)
-				end
-				return original(...)
-			end
-			return nextHook(...)
-		end
-
-		return {
-			Add = function(_, id, priority, callback)
-				for i = #hooks, 1, -1 do
-					if hooks[i].Id == id then
-						table.remove(hooks, i)
-					end
-				end
-
-				order += 1
-				local entry = {
-					Id = id,
-					Priority = priority or 100,
-					Order = order,
-					Callback = callback,
-				}
-
-				table.insert(hooks, entry)
-				table.sort(hooks, function(a, b)
-					return a.Priority == b.Priority and a.Order < b.Order or a.Priority < b.Priority
-				end)
-				sync()
-
-				return function()
-					for i = #hooks, 1, -1 do
-						if hooks[i] == entry then
-							table.remove(hooks, i)
-						end
-					end
-					sync()
-				end
-			end,
-			Destroy = function()
-				table.clear(hooks)
-				sync()
-			end,
-		}
-	end
-
-	bedwars.ProjectileLaunchHook = createMethodHook(bedwars.ProjectileController, 'calculateImportantLaunchValues')
-	vape:Clean(function()
-		bedwars.ProjectileLaunchHook:Destroy()
 	end)
 
 run(function()
@@ -5613,39 +5579,123 @@ end)
 			end
 		})
 	end)
-		
-	run(function()
-		local ShopTierBypass
-		local tiered, nexttier = {}, {}
-		
-		ShopTierBypass = vape.Categories.Utility:CreateModule({
-			Name = 'ShopTierBypass',
-			Function = function(callback)
-				if callback then
-					repeat task.wait() until store.shopLoaded or not ShopTierBypass.Enabled
-					if ShopTierBypass.Enabled then
-						for _, v in bedwars.Shop.ShopItems do
-							tiered[v] = v.tiered
-							nexttier[v] = v.nextTier
-							v.nextTier = nil
-							v.tiered = nil
+	-- pasted and fix bugs, but the dev is to slow to understand why pepople crash LO	
+run(function()
+	local ShopTierBypass
+	local tiered, nexttier = {}, {}
+	local originalGetShop
+	local shopItemsTracked = {}
+	
+	local function applyBypassToItem(item)
+		if item and type(item) == "table" then
+			if not tiered[item] then 
+				tiered[item] = item.tiered 
+			end
+			if not nexttier[item] then 
+				nexttier[item] = item.nextTier 
+			end
+			item.nextTier = nil
+			item.tiered = nil
+			shopItemsTracked[item] = true
+		end
+	end
+	
+	local function applyBypassToTable(tbl)
+		if tbl and type(tbl) == "table" then
+			for _, item in pairs(tbl) do
+				if type(item) == "table" then
+					applyBypassToItem(item)
+				end
+			end
+		end
+	end
+	
+	ShopTierBypass = vape.Categories.Utility:CreateModule({
+		Name = 'ShopTierBypass',
+		Function = function(callback)
+			if callback then
+				local function collectAndBypass()
+					local itemsSeen = {}
+					if bedwars.Shop and bedwars.Shop.ShopItems then
+						for _, v in pairs(bedwars.Shop.ShopItems) do
+							itemsSeen[v] = true
 						end
 					end
-				else
-					for i, v in tiered do
-						i.tiered = v
+					if bedwars.ShopItems then
+						for _, v in pairs(bedwars.ShopItems) do
+							itemsSeen[v] = true
+						end
 					end
-					for i, v in nexttier do
-						i.nextTier = v
+					
+					local shopController = bedwars.Shop
+					if shopController and shopController and shopController.getShop then
+						local shopTable = shopController.getShop()
+						if type(shopTable) == "table" then
+							for _, v in pairs(shopTable) do
+								itemsSeen[v] = true
+							end
+						end
 					end
-					table.clear(nexttier)
-					table.clear(tiered)
+					for item, _ in pairs(itemsSeen) do
+						applyBypassToItem(item)
+					end
 				end
-			end,
-			Tooltip = 'Lets you buy things like armor early.'
-		})
-	end)
-		
+				collectAndBypass()
+				if bedwars.Shop and bedwars.Shop.getShop and not originalGetShop then
+					originalGetShop = bedwars.Shop.getShop
+					bedwars.Shop.getShop = function(...)
+						local result = originalGetShop(...)
+						if type(result) == "table" then
+							applyBypassToTable(result)
+						end
+						return result
+					end
+				end
+				
+				local shopController = bedwars.Shop
+				if shopController and shopController and shopController.getShop then
+					if not tiered["shopControllerHooked"] then
+						tiered["shopControllerHooked"] = true
+						local originalControllerGetShop = shopController.getShop
+						shopController.getShop = function(...)
+							local result = originalControllerGetShop(...)
+							if type(result) == "table" then
+								applyBypassToTable(result)
+							end
+							return result
+						end
+					end
+				end
+			else
+				for item, _ in pairs(shopItemsTracked) do
+					if item and type(item) == "table" then
+						if tiered[item] ~= nil then
+							item.tiered = tiered[item]
+						end
+						if nexttier[item] ~= nil then
+							item.nextTier = nexttier[item]
+						end
+					end
+				end
+				
+				if tiered["shopControllerHooked"] then
+					tiered["shopControllerHooked"] = nil
+				end
+				
+				if originalGetShop then
+					bedwars.Shop.getShop = originalGetShop
+					originalGetShop = nil
+				end
+				
+				table.clear(tiered)
+				table.clear(nexttier)
+				table.clear(shopItemsTracked)
+			end
+		end,
+		Tooltip = 'Lets you buy things like armor and tools early.'
+	})
+end)
+
 	run(function()
 		local StaffDetector
 		local Mode
@@ -9130,28 +9180,7 @@ end)
 			List = WinEffectName
 		})
 	end)
-	local function getWorldFolder()
-		local Map = workspace:FindFirstChild("Map")
-		if not Map then return nil end
-		local Worlds = Map:FindFirstChild("Worlds")
-		if not Worlds then return nil end
-		for _, world in Worlds:GetChildren() do
-			return world
-		end
-		return nil
-	end
 
-local function getPickaxeSlot()
-	for i, v in store.inventory.hotbar do
-		if v.item and bedwars.ItemMeta[v.item.itemType] then
-			local meta = bedwars.ItemMeta[v.item.itemType]
-			if meta.breakBlock then
-				return i - 1
-			end
-		end
-	end
-	return nil
-end
 
 
 	run(function()
@@ -9329,254 +9358,1200 @@ end
 
 
 run(function()
-    local KitRender
-    local Players = playersService
-    local player = Players.LocalPlayer
-    local PlayerGui = player:WaitForChild("PlayerGui")
+	local BlockCPSRemover
+	local CPS
 
-    local activeLoops = {}
-    local updateDebounce = {}
-    local retryThread = nil
+	local module = require(replicatedStorage.TS['shared-constants'])
 
-    local function createkitrender(plr)
-        local icon = Instance.new("ImageLabel")
-        icon.Name = "soryedKitRender" 
-        icon.AnchorPoint = Vector2.new(1, 0.5)
-        icon.BackgroundTransparency = 1
-        icon.Position = UDim2.new(1.05, 0, 0.5, 0)
-        icon.Size = UDim2.new(1.5, 0, 1.5, 0)
-        icon.SizeConstraint = Enum.SizeConstraint.RelativeYY
-        icon.ImageTransparency = 0.4
-        icon.ScaleType = Enum.ScaleType.Crop
-        local uar = Instance.new("UIAspectRatioConstraint")
-        uar.AspectRatio = 1
-        uar.AspectType = Enum.AspectType.FitWithinMaxSize
-        uar.DominantAxis = Enum.DominantAxis.Width
-        uar.Parent = icon
-		local kit = plr:GetAttribute("PlayingAsKits")
-		local meta = bedwars.BedwarsKitMeta and (bedwars.BedwarsKitMeta[kit] or bedwars.BedwarsKitMeta.none)
-        local newImage = (meta and meta.renderImage) or kitImageIds[kit] or kitImageIds["none"]
-		icon.Image = newImage
+	local function resetCPS()
+		if old then
+			module.BLOCK_PLACE_CPS = old
+			CPS:SetValue(old)
+			old = nil
+		else
+			CPS:SetValue(module.BLOCK_PLACE_CPS or 12)
+		end
+	end
+
+	local old = 12
+
+	BlockCPSRemover = vape.Categories.Blatant:CreateModule({
+		Name = 'BlockCPSRemover',
+		Tooltip = 'allows you to edit t he cps cap (I CREATED THIS METHOD EVERY1 SKIDDED lOL)',
+		Function = function(callback)
+			if callback then
+				if not old then
+					old = module.BLOCK_PLACE_CPS or 12
+				end
+				module.BLOCK_PLACE_CPS = (CPS.Value == 0 and math.huge or CPS.Value)
+			else
+				if old then
+					module.BLOCK_PLACE_CPS = old
+					old = nil
+				else
+					module.BLOCK_PLACE_CPS = module.BLOCK_PLACE_CPS
+				end
+			end
+		end
+	})
+
+	CPS = BlockCPSRemover:CreateSlider({
+		Name = 'CPS',
+		Min = 0,
+		Max = (12^2),
+		Default = 12,
+		Decimal = 100,
+		Tooltip = '0 = infinite cps btw.',
+		Function = function(val)
+			if BlockCPSRemover.Enabled then
+				if not old then
+					old = module.BLOCK_PLACE_CPS or 12
+				end
+				module.BLOCK_PLACE_CPS = (val == 0 and math.huge or val)
+			end
+		end
+	})
+
+	BlockCPSRemover:CreateButton({
+		Name = 'Reset CPS',
+		Function = resetCPS
+	})
+end)
+
+-- pasted but who cares lol
+
+run(function()
+    local GeneratorESP
+    DiamondToggle = nil
+    EmeraldToggle = nil
+    TeamGenToggle = nil
+    ShowOwnTeamGen = nil
+    ShowEnemyTeamGen = nil
+    local UIStyle
+    local CompactDiamondToggle
+    local CompactEmeraldToggle
+    local CollectionService = collectionService
+    local RunService = runService
+    local Reference = {}
+    local Folder = Instance.new('Folder')
+    Folder.Parent = vape.gui
+    local CompactFolder = Instance.new('Folder')
+    CompactFolder.Parent = vape.gui
+    local teamColors = {
+        [1] = {name = "Blue",   color = Color3.fromRGB(85, 150, 255)},
+        [2] = {name = "Orange", color = Color3.fromRGB(255, 150, 50)},
+        [3] = {name = "Pink",   color = Color3.fromRGB(255, 100, 200)},
+        [4] = {name = "Yellow", color = Color3.fromRGB(255, 255, 50)}
+    }
+
+    local generatorTypes = {
+        diamond = {
+            keywords = {'diamond'},
+            color = Color3.fromRGB(85, 200, 255),
+            icon = 'diamond',
+            displayName = 'Diamond',
+            isTeamGen = false
+        },
+        emerald = {
+            keywords = {'emerald'},
+            color = Color3.fromRGB(0, 255, 100),
+            icon = 'emerald',
+            displayName = 'Emerald',
+            isTeamGen = false
+        }
+    }
+
+    local compactUI = Instance.new('ScreenGui')
+    compactUI.Name = 'GeneratorCompactUI'
+    compactUI.Parent = vape.gui
+    compactUI.Enabled = false
+    compactUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    compactUI.DisplayOrder = 10
+    compactUI.ResetOnSpawn = false
+
+    local mainFrame = Instance.new('Frame')
+    mainFrame.Name = 'MainFrame'
+    mainFrame.Parent = compactUI
+    mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    mainFrame.BackgroundTransparency = 0.3
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Position = UDim2.new(1, -8, 1, -8)
+    mainFrame.Size = UDim2.new(0, 120, 0, 100)
+    mainFrame.AnchorPoint = Vector2.new(1, 1)
+
+    local uicorner = Instance.new('UICorner')
+    uicorner.CornerRadius = UDim.new(0, 8)
+    uicorner.Parent = mainFrame
+
+    local title = Instance.new('TextLabel')
+    title.Name = 'Title'
+    title.Parent = mainFrame
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(1, 0, 0, 25)
+    title.Position = UDim2.new(0, 0, 0, 5)
+    title.Text = "GEN ESP"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 14
+    title.Font = Enum.Font.GothamBold
+    title.TextStrokeTransparency = 0.5
+    title.TextStrokeColor3 = Color3.new(0, 0, 0)
+
+    local diamondFrame = Instance.new('Frame')
+    diamondFrame.Name = 'DiamondFrame'
+    diamondFrame.Parent = mainFrame
+    diamondFrame.BackgroundTransparency = 1
+    diamondFrame.Size = UDim2.new(1, -20, 0, 25)
+    diamondFrame.Position = UDim2.new(0, 10, 0, 35)
+
+    local diamondIcon = Instance.new('ImageLabel')
+    diamondIcon.Name = 'DiamondIcon'
+    diamondIcon.Parent = diamondFrame
+    diamondIcon.BackgroundTransparency = 1
+    diamondIcon.Size = UDim2.new(0, 18, 0, 18)
+    diamondIcon.Position = UDim2.new(0, 0, 0.5, -9)
+    diamondIcon.Image = bedwars.getIcon({itemType = 'diamond'}, true)
+
+    local diamondTimer = Instance.new('TextLabel')
+    diamondTimer.Name = 'DiamondTimer'
+    diamondTimer.Parent = diamondFrame
+    diamondTimer.BackgroundTransparency = 1
+    diamondTimer.Size = UDim2.new(1, -25, 1, 0)
+    diamondTimer.Position = UDim2.new(0, 25, 0, 0)
+    diamondTimer.Text = "00"
+    diamondTimer.TextColor3 = Color3.fromRGB(85, 200, 255)
+    diamondTimer.TextSize = 18
+    diamondTimer.Font = Enum.Font.GothamBold
+    diamondTimer.TextXAlignment = Enum.TextXAlignment.Left
+
+    local emeraldFrame = Instance.new('Frame')
+    emeraldFrame.Name = 'EmeraldFrame'
+    emeraldFrame.Parent = mainFrame
+    emeraldFrame.BackgroundTransparency = 1
+    emeraldFrame.Size = UDim2.new(1, -20, 0, 25)
+    emeraldFrame.Position = UDim2.new(0, 10, 0, 65)
+
+    local emeraldIcon = Instance.new('ImageLabel')
+    emeraldIcon.Name = 'EmeraldIcon'
+    emeraldIcon.Parent = emeraldFrame
+    emeraldIcon.BackgroundTransparency = 1
+    emeraldIcon.Size = UDim2.new(0, 18, 0, 18)
+    emeraldIcon.Position = UDim2.new(0, 0, 0.5, -9)
+    emeraldIcon.Image = bedwars.getIcon({itemType = 'emerald'}, true)
+
+    local emeraldTimer = Instance.new('TextLabel')
+    emeraldTimer.Name = 'EmeraldTimer'
+    emeraldTimer.Parent = emeraldFrame
+    emeraldTimer.BackgroundTransparency = 1
+    emeraldTimer.Size = UDim2.new(1, -25, 1, 0)
+    emeraldTimer.Position = UDim2.new(0, 25, 0, 0)
+    emeraldTimer.Text = "00"
+    emeraldTimer.TextColor3 = Color3.fromRGB(0, 255, 100)
+    emeraldTimer.TextSize = 18
+    emeraldTimer.Font = Enum.Font.GothamBold
+    emeraldTimer.TextXAlignment = Enum.TextXAlignment.Left
+
+    local diamondTimes = {}
+    local emeraldTimes = {}
+
+    local function getMyTeamId()
+        local myTeam = lplr:GetAttribute('Team')
+        if myTeam == nil then return nil end
+        return tonumber(myTeam)
+    end
+
+    local function getGeneratorTeamId(generatorId)
+        local teamNum = string.match(generatorId, "^(%d+)_generator")
+        if teamNum then
+            return tonumber(teamNum)
+        end
+        return nil
+    end
+
+    local function isTeamGenerator(generatorId)
+        return string.match(generatorId, "^%d+_generator") ~= nil
+    end
+
+    local function getGeneratorType(generatorId)
+        local idLower = string.lower(generatorId)
+
+        if isTeamGenerator(generatorId) then
+            return 'teamgen', {
+                color = Color3.fromRGB(200, 200, 200),
+                icon = 'iron',
+                displayName = 'Team Gen',
+                isTeamGen = true
+            }
+        end
+
+        for genType, config in pairs(generatorTypes) do
+            for _, keyword in ipairs(config.keywords) do
+                if idLower:find(keyword) then
+                    return genType, config
+                end
+            end
+        end
+        return nil, nil
+    end
+
+    local function isGeneratorEnabled(genType, teamId)
+        if genType == 'diamond' then
+            return DiamondToggle.Enabled
+        elseif genType == 'emerald' then
+            return EmeraldToggle.Enabled
+        elseif genType == 'teamgen' then
+            if not TeamGenToggle.Enabled then return false end
+            local myTeamId = getMyTeamId()
+            if not myTeamId or not teamId then return TeamGenToggle.Enabled end
+            if teamId == myTeamId then
+                return ShowOwnTeamGen.Enabled
+            else
+                return ShowEnemyTeamGen.Enabled
+            end
+        end
+        return false
+    end
+
+    local function getProperIcon(iconType)
+        local icon = bedwars.getIcon({itemType = iconType}, true)
+        if not icon or icon == "" then return nil end
         return icon
     end
 
-    local function removeallkitrenders()
-        for key, _ in pairs(activeLoops) do
-            activeLoops[key] = nil
-        end
-        table.clear(updateDebounce)
-        
-        if retryThread then
-            task.cancel(retryThread)
-            retryThread = nil
-        end
-        
-        for _, v in ipairs(PlayerGui:GetDescendants()) do
-            if v:IsA("ImageLabel") and v.Name == "soryedKitRender" then  
-                v:Destroy()
-            end
-        end
-    end
-
-    local function refreshicon(icon, plr)
-        if not icon or not icon.Parent then return end
-        local kit = plr:GetAttribute("PlayingAsKits")
-        local meta = bedwars.BedwarsKitMeta and (bedwars.BedwarsKitMeta[kit] or bedwars.BedwarsKitMeta.none)
-        local newImage = (meta and meta.renderImage) or kitImageIds[kit] or kitImageIds["none"]
-        if icon.Image ~= newImage then
-            icon.Image = newImage
-        end
-    end
-
-    local function findPlayer(label, container)
-        local render = container:FindFirstChild("PlayerRender", true)
-        if render and render:IsA("ImageLabel") and render.Image then
-            local userId = string.match(render.Image, "id=(%d+)")
-            if userId then
-                local plr = Players:GetPlayerByUserId(tonumber(userId))
-                if plr then return plr end
-            end
-        end
-        local text = label.Text
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr.Name == text or plr.DisplayName == text or plr:GetAttribute("DisguiseDisplayName") == text then
-                return plr
-            end
-            local smName = nil
-            pcall(function()
-                smName = bedwars.KnitClient.Controllers.StreamerModeController:getDisplayName(plr)
-            end)
-            if smName and smName == text then
-                return plr
-            end
-        end
-    end
-
-    local function handleLabel(label)
-        if not (label:IsA("TextLabel") and label.Name == "PlayerName") then return end
-        task.spawn(function()
-            local container = label.Parent
-            for _ = 1, 3 do
-                if container and container.Parent then
-                    container = container.Parent
+    local function getTierText(generatorAdornee)
+        if not generatorAdornee then return nil end
+        if generatorAdornee.Name ~= 'GeneratorAdornee' then return nil end
+        local reactTree = generatorAdornee:FindFirstChild('RoactTree')
+        if not reactTree then return nil end
+        local teamApp = reactTree:FindFirstChild('TeamOreGeneratorApp')
+        if not teamApp then return nil end
+        local globalGen = teamApp:FindFirstChild('GlobalOreGenerator')
+        if globalGen then
+            for _, child in pairs(globalGen:GetDescendants()) do
+                if child:IsA('TextLabel') then
+                    local text = child.Text
+                    if text:find("Tier") or text:match("^[IVX]+$") or text == "0" then
+                        return child
+                    end
                 end
             end
-            if not container or not container:IsA("Frame") then return end
-            
-            local playerFound = findPlayer(label, container)
-            if not playerFound then
-                task.wait(0.5)
-                playerFound = findPlayer(label, container)
-            end
-            if not playerFound then return end
-            if getAccountTier(playerFound) >= 4 and getAccountTier(lplr) == 0 then return end
-            local myTeam = lplr:GetAttribute('Team')
-            local theirTeam = playerFound:GetAttribute('Team')
-            if not myTeam or not theirTeam or myTeam == theirTeam then return end
-            
-            container.Name = playerFound.Name
-            local card = container:FindFirstChild("1") and container["1"]:FindFirstChild("MatchDraftPlayerCard")
-            if not card then return end
-            
-            local icon = card:FindFirstChild("soryedKitRender")  
-            if not icon then
-                icon = createkitrender(playerFound)
-                icon.Parent = card
-            end
-            
-            local loopKey = playerFound.UserId
-            if activeLoops[loopKey] then
-                activeLoops[loopKey] = nil
-            end
-            activeLoops[loopKey] = true
-			task.spawn(function()
-				while activeLoops[loopKey] and KitRender.Enabled do
-					if not container or not container.Parent then
-						break
-					end
-					if playerFound and icon and icon.Parent then
-						refreshicon(icon, playerFound)
-					end
-					task.wait(0.3)
-				end
-				activeLoops[loopKey] = nil
-				updateDebounce[loopKey] = nil
-			end)
-        end)
-    end
-
-    local activeConnections = {}
-    local kitLabels = {}
-    local squadUpdateDebounce = {}
-    local processedPlayers = {}
-
-    local function createKitLabel(parent, kitImage)
-        if kitLabels[parent] then kitLabels[parent]:Destroy() end
-        local kitLabel = Instance.new("ImageLabel")
-        kitLabel.Name = "soryedKitIcon"
-        kitLabel.Size = UDim2.new(1, 0, 1, 0)
-        kitLabel.Position = UDim2.new(1.1, 0, 0, 0)
-        kitLabel.BackgroundTransparency = 1
-        kitLabel.Image = kitImage
-        kitLabel.Parent = parent
-        kitLabels[parent] = kitLabel
-        return kitLabel
-    end
-
-    local function setupSquadsKitRender(obj)
-        if obj.Name == "PlayerRender" and obj.Parent and obj.Parent.Parent and obj.Parent.Parent.Parent and obj.Parent.Parent.Parent.Parent and obj.Parent.Parent.Parent.Parent.Parent and obj.Parent.Parent.Parent.Parent.Parent.Name == "MatchDraftTeamCardRow" then
-            local Rank = obj.Parent:FindFirstChild('3')
-            if not Rank then return end
-            local userId = string.match(obj.Image, "id=(%d+)")
-            if not userId then return end
-            local plr = playersService:GetPlayerByUserId(tonumber(userId))
-            if not plr then return end
-            if getAccountTier(plr) >= 4 and getAccountTier(lplr) == 0 then return end
-            local myTeam = lplr:GetAttribute('Team')
-            local theirTeam = plr:GetAttribute('Team')
-            if not myTeam or not theirTeam or myTeam == theirTeam then return end
-            local loopKey = plr.UserId
-            processedPlayers[loopKey] = true
-            if activeConnections[loopKey] then activeConnections[loopKey]:Disconnect() activeConnections[loopKey] = nil end
-            local function updateKit()
-                if not KitRender.Enabled then return end
-                if not Rank or not Rank.Parent then
-                    if activeConnections[loopKey] then activeConnections[loopKey]:Disconnect() activeConnections[loopKey] = nil end
-                    if kitLabels[Rank] then kitLabels[Rank]:Destroy() kitLabels[Rank] = nil end
-                    return
+        end
+        local teamGenMain = teamApp:FindFirstChild('TeamGenMain')
+        if teamGenMain then
+            for _, child in pairs(teamGenMain:GetDescendants()) do
+                if child:IsA('TextLabel') then
+                    local text = child.Text
+                    if text:find("Tier") or text:match("^[IVX]+$") or text == "0" then
+                        return child
+                    end
                 end
-                local kitName = plr:GetAttribute("PlayingAsKits") or "none"
-                local render = bedwars.BedwarsKitMeta[kitName] or bedwars.BedwarsKitMeta.none
-                if kitLabels[Rank] then kitLabels[Rank].Image = render.renderImage
-                else createKitLabel(Rank, render.renderImage) end
             end
-            updateKit()
-            local connection = plr:GetAttributeChangedSignal("PlayingAsKits"):Connect(function()
-                local t = tick()
-                if not squadUpdateDebounce[loopKey] or (t - squadUpdateDebounce[loopKey]) >= 0.1 then
-                    squadUpdateDebounce[loopKey] = t
-                    updateKit()
+        end
+        return nil
+    end
+
+    local function extractTierLevel(tierText)
+        if not tierText or tierText == "" then return "0" end
+        if tierText == "0" then return "0" end
+        local tierMatch = tierText:match("Tier%s+([IVX]+)")
+        if tierMatch then return tierMatch end
+        if tierText:match("^[IVX]+$") then return tierText end
+        local numTier = tierText:match("Tier%s+(%d+)")
+        if numTier then
+            local num = tonumber(numTier)
+            if num == 0 then return "0"
+            elseif num == 1 then return "I"
+            elseif num == 2 then return "II"
+            elseif num == 3 then return "III"
+            end
+        end
+        return "0"
+    end
+
+    local function getCountdownText(generatorAdornee)
+        if not generatorAdornee then return nil end
+        if generatorAdornee.Name ~= 'GeneratorAdornee' then return nil end
+        local reactTree = generatorAdornee:FindFirstChild('RoactTree')
+        if not reactTree then return nil end
+        local teamApp = reactTree:FindFirstChild('TeamOreGeneratorApp')
+        if not teamApp then return nil end
+        local globalGen = teamApp:FindFirstChild('GlobalOreGenerator')
+        if not globalGen then return nil end
+        local countdown = globalGen:FindFirstChild('Countdown')
+        if not countdown then return nil end
+        local textLabel = countdown:FindFirstChild('Text')
+        if not textLabel then
+            if countdown:IsA('TextLabel') then return countdown end
+            return nil
+        end
+        return textLabel
+    end
+
+    local function extractSecondsFromText(text)
+        if not text or text == "" then return 0 end
+        local seconds = text:match("%[(%d+)%]")
+        if seconds then return tonumber(seconds) or 0 end
+        local justNumber = text:match("(%d+)")
+        if justNumber then return tonumber(justNumber) or 0 end
+        return 0
+    end
+
+    local function getResourceCount(position, resourceType)
+        local count = 0
+        for _, drop in pairs(CollectionService:GetTagged('ItemDrop')) do
+            if drop:FindFirstChild('Handle') then
+                local dropName = drop.Name:lower()
+                if dropName:find(resourceType) then
+                    local dist = (drop.Handle.Position - position).Magnitude
+                    if dist <= 10 then
+                        local amount = drop:GetAttribute('Amount') or 1
+                        count = count + amount
+                    end
                 end
-            end)
-            activeConnections[loopKey] = connection
-            KitRender:Clean(connection)
+            end
+        end
+        return count
+    end
+
+    local CompactGenerators = {}
+
+    local function rebuildCompactGenerators()
+        table.clear(CompactGenerators)
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj.Name == 'GeneratorAdornee' then
+                local ok, generatorId = pcall(function() return obj:GetAttribute('Id') end)
+                if ok and generatorId and type(generatorId) == 'string' and generatorId ~= '' then
+                    local genType = getGeneratorType(generatorId)
+                    if genType == 'diamond' or genType == 'emerald' then
+                        table.insert(CompactGenerators, {obj = obj, genType = genType})
+                    end
+                end
+            end
         end
     end
 
-    local function setupSquadsRender()
-        local teams = lplr.PlayerGui:FindFirstChild("MatchDraftApp")
-        if not teams then return false end
-        task.wait(0.5)
-        for _, obj in teams:GetDescendants() do
-            if KitRender.Enabled then task.spawn(function() setupSquadsKitRender(obj) end) end
+    local function updateCompactUI()
+        if not GeneratorESP.Enabled or UIStyle.Value ~= 'Compact' then
+            compactUI.Enabled = false
+            return
         end
-        KitRender:Clean(teams.DescendantAdded:Connect(function(obj)
-            if KitRender.Enabled then task.wait(0.1) setupSquadsKitRender(obj) end
-        end))
-        return true
+        compactUI.Enabled = true
+        local bestDiamondTime = math.huge
+        local bestEmeraldTime = math.huge
+        for i = #CompactGenerators, 1, -1 do
+            local entry = CompactGenerators[i]
+            if not entry.obj or not entry.obj.Parent then
+                table.remove(CompactGenerators, i)
+                continue
+            end
+            local countdownText = getCountdownText(entry.obj)
+            if countdownText and countdownText.Text then
+                local timeLeft = extractSecondsFromText(countdownText.Text)
+                if entry.genType == 'diamond' and timeLeft > 0 and timeLeft < bestDiamondTime then
+                    bestDiamondTime = timeLeft
+                elseif entry.genType == 'emerald' and timeLeft > 0 and timeLeft < bestEmeraldTime then
+                    bestEmeraldTime = timeLeft
+                end
+            end
+        end
+        local showDiamond = CompactDiamondToggle and CompactDiamondToggle.Enabled
+        local showEmerald = CompactEmeraldToggle and CompactEmeraldToggle.Enabled
+
+        if not showDiamond and not showEmerald then
+            compactUI.Enabled = false
+            return
+        end
+
+        diamondFrame.Visible = showDiamond
+        emeraldFrame.Visible = showEmerald
+
+        if showDiamond then
+            diamondFrame.Position = UDim2.new(0, 10, 0, 35)
+        end
+        if showEmerald then
+            emeraldFrame.Position = UDim2.new(0, 10, 0, showDiamond and 65 or 35)
+        end
+
+        diamondTimes[1] = bestDiamondTime ~= math.huge and bestDiamondTime or 0
+        emeraldTimes[1] = bestEmeraldTime ~= math.huge and bestEmeraldTime or 0
+        if bestDiamondTime == math.huge then
+            diamondTimer.Text = "00"
+        else
+            diamondTimer.Text = string.format("%02d", bestDiamondTime)
+            if bestDiamondTime <= 5 then
+                diamondTimer.TextColor3 = Color3.fromRGB(255, 50, 50)
+            elseif bestDiamondTime <= 10 then
+                diamondTimer.TextColor3 = Color3.fromRGB(255, 165, 0)
+            else
+                diamondTimer.TextColor3 = Color3.fromRGB(85, 200, 255)
+            end
+        end
+        if bestEmeraldTime == math.huge then
+            emeraldTimer.Text = "00"
+        else
+            emeraldTimer.Text = string.format("%02d", bestEmeraldTime)
+            if bestEmeraldTime <= 5 then
+                emeraldTimer.TextColor3 = Color3.fromRGB(255, 50, 50)
+            elseif bestEmeraldTime <= 10 then
+                emeraldTimer.TextColor3 = Color3.fromRGB(255, 165, 0)
+            else
+                emeraldTimer.TextColor3 = Color3.fromRGB(0, 255, 100)
+            end
+        end
     end
 
-    local function removeSquadsRender()
-        for key, connection in pairs(activeConnections) do
-            if connection then connection:Disconnect() end
-            activeConnections[key] = nil
-        end
-        for parent, label in pairs(kitLabels) do
-            if label then label:Destroy() end
-            kitLabels[parent] = nil
-        end
-        table.clear(squadUpdateDebounce)
-        table.clear(processedPlayers)
+    local function clearAllESP()
+        Folder:ClearAllChildren()
+        table.clear(Reference)
+        compactUI.Enabled = false
     end
 
-    local function setupKitRender()
-        local draftApp = PlayerGui:FindFirstChild("MatchDraftApp")
-        if not draftApp then return false end
+    local function createESP(generatorAdornee, genType, config, position, teamId)
+        if not isGeneratorEnabled(genType, teamId) then return end
+        if Reference[generatorAdornee] then return end
 
-        for _, child in ipairs(draftApp:GetDescendants()) do
-            if KitRender.Enabled then handleLabel(child) end
+        if UIStyle.Value == 'Compact' then
+            Reference[generatorAdornee] = {
+                genType = genType,
+                position = position,
+                teamId = teamId,
+                isTeamGen = config.isTeamGen
+            }
+            return
         end
 
-        KitRender:Clean(draftApp.DescendantAdded:Connect(function(child)
-            if KitRender.Enabled then handleLabel(child) end
-        end))
+        local displayColor = config.color
+        local teamName = nil
+        if config.isTeamGen and teamId and teamColors[teamId] then
+            displayColor = teamColors[teamId].color
+            teamName = teamColors[teamId].name
+        end
 
-        return true
+        local billboard = Instance.new('BillboardGui')
+        billboard.Parent = Folder
+        billboard.Name = 'generator-esp-' .. genType
+        billboard.AlwaysOnTop = true
+        billboard.ClipsDescendants = false
+        billboard.Adornee = generatorAdornee
+
+        if config.isTeamGen then
+            billboard.Size = UDim2.fromOffset(180, 55)
+            billboard.StudsOffsetWorldSpace = Vector3.new(0, 5, 0)
+        else
+            billboard.Size = UDim2.fromOffset(80, 30)
+            billboard.StudsOffsetWorldSpace = Vector3.new(0, 4, 0)
+        end
+
+        local blur = addBlur(billboard)
+        blur.Visible = true
+
+        if config.isTeamGen and teamName then
+            local dot = Instance.new('Frame')
+            dot.Name = 'TeamDot'
+            dot.Parent = billboard
+            dot.Size = UDim2.fromOffset(8, 8)
+            dot.Position = UDim2.new(0, 10, 0, 5)
+            dot.BackgroundColor3 = displayColor
+            dot.BorderSizePixel = 0
+            local dotCorner = Instance.new('UICorner')
+            dotCorner.CornerRadius = UDim.new(1, 0)
+            dotCorner.Parent = dot
+
+            local teamLabel = Instance.new('TextLabel')
+            teamLabel.Name = 'TeamLabel'
+            teamLabel.Parent = billboard
+            teamLabel.BackgroundTransparency = 1
+            teamLabel.Size = UDim2.new(1, 0, 0, 18)
+            teamLabel.Position = UDim2.new(0, 0, 0, 0)
+            teamLabel.Text = teamName
+            teamLabel.TextColor3 = displayColor
+            teamLabel.TextSize = 13
+            teamLabel.Font = Enum.Font.GothamBold
+            teamLabel.TextStrokeTransparency = 0.4
+            teamLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+            teamLabel.TextXAlignment = Enum.TextXAlignment.Center
+        end
+
+        local frame = Instance.new('Frame')
+        frame.Size = config.isTeamGen and UDim2.new(1, 0, 0, 35) or UDim2.fromScale(1, 1)
+        frame.Position = config.isTeamGen and UDim2.new(0, 0, 0, 20) or UDim2.new(0, 0, 0, 0)
+        frame.BackgroundColor3 = Color3.new(0, 0, 0)
+        frame.BackgroundTransparency = 0.3
+        frame.BorderSizePixel = 0
+        frame.Parent = billboard
+
+        if config.isTeamGen and teamId and teamColors[teamId] then
+            local stripe = Instance.new('Frame')
+            stripe.Name = 'TeamStripe'
+            stripe.Parent = frame
+            stripe.Size = UDim2.new(0, 3, 1, 0)
+            stripe.Position = UDim2.new(0, 0, 0, 0)
+            stripe.BackgroundColor3 = displayColor
+            stripe.BorderSizePixel = 0
+            local stripeCorner = Instance.new('UICorner')
+            stripeCorner.CornerRadius = UDim.new(0, 3)
+            stripeCorner.Parent = stripe
+        end
+
+        local uicorner2 = Instance.new('UICorner')
+        uicorner2.CornerRadius = UDim.new(0, 6)
+        uicorner2.Parent = frame
+
+        if config.isTeamGen then
+            local tierLabel = Instance.new('TextLabel')
+            tierLabel.Name = 'Tier'
+            tierLabel.Size = UDim2.new(0, 25, 1, 0)
+            tierLabel.Position = UDim2.new(0, 8, 0, 0)
+            tierLabel.BackgroundTransparency = 1
+            tierLabel.Text = "0"
+            tierLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+            tierLabel.TextSize = 16
+            tierLabel.Font = Enum.Font.GothamBold
+            tierLabel.TextStrokeTransparency = 0.5
+            tierLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+            tierLabel.Parent = frame
+
+            local resources = {
+                {name = 'iron',    color = Color3.fromRGB(200, 200, 200), icon = 'iron',    xOffset = 35},
+                {name = 'diamond', color = Color3.fromRGB(85, 200, 255),  icon = 'diamond', xOffset = 85},
+                {name = 'emerald', color = Color3.fromRGB(0, 255, 100),   icon = 'emerald', xOffset = 135}
+            }
+
+            local resourceLabels = {}
+            for _, resource in ipairs(resources) do
+                local iconImage = getProperIcon(resource.icon)
+                if iconImage then
+                    local image = Instance.new('ImageLabel')
+                    image.Size = UDim2.fromOffset(18, 18)
+                    image.Position = UDim2.new(0, resource.xOffset, 0.5, 0)
+                    image.AnchorPoint = Vector2.new(0, 0.5)
+                    image.BackgroundTransparency = 1
+                    image.Image = iconImage
+                    image.Parent = frame
+                end
+                local countLabel = Instance.new('TextLabel')
+                countLabel.Name = resource.name .. '_count'
+                countLabel.Size = UDim2.new(0, 25, 1, 0)
+                countLabel.Position = UDim2.new(0, resource.xOffset + 20, 0, 0)
+                countLabel.BackgroundTransparency = 1
+                countLabel.Text = "0"
+                countLabel.TextColor3 = resource.color
+                countLabel.TextSize = 16
+                countLabel.Font = Enum.Font.GothamBold
+                countLabel.TextStrokeTransparency = 0.5
+                countLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+                countLabel.TextXAlignment = Enum.TextXAlignment.Left
+                countLabel.Parent = frame
+                resourceLabels[resource.name] = countLabel
+            end
+
+            Reference[generatorAdornee] = {
+                billboard = billboard,
+                tierLabel = tierLabel,
+                ironLabel = resourceLabels.iron,
+                diamondLabel = resourceLabels.diamond,
+                emeraldLabel = resourceLabels.emerald,
+                genType = genType,
+                position = position,
+                teamId = teamId,
+                isTeamGen = true
+            }
+        else
+            local iconImage = getProperIcon(config.icon)
+            if iconImage then
+                local image = Instance.new('ImageLabel')
+                image.Size = UDim2.fromOffset(20, 20)
+                image.Position = UDim2.new(0, 5, 0.5, 0)
+                image.AnchorPoint = Vector2.new(0, 0.5)
+                image.BackgroundTransparency = 1
+                image.Image = iconImage
+                image.Parent = frame
+            end
+            local timerLabel = Instance.new('TextLabel')
+            timerLabel.Name = 'Timer'
+            timerLabel.Size = UDim2.new(0, 30, 1, 0)
+            timerLabel.Position = UDim2.new(0.5, 0, 0, 0)
+            timerLabel.AnchorPoint = Vector2.new(0.5, 0)
+            timerLabel.BackgroundTransparency = 1
+            timerLabel.Text = "00"
+            timerLabel.TextColor3 = displayColor
+            timerLabel.TextSize = 18
+            timerLabel.Font = Enum.Font.GothamBold
+            timerLabel.TextStrokeTransparency = 0.5
+            timerLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+            timerLabel.Parent = frame
+            local amountLabel = Instance.new('TextLabel')
+            amountLabel.Name = 'Amount'
+            amountLabel.Size = UDim2.new(0, 20, 1, 0)
+            amountLabel.Position = UDim2.new(1, -20, 0, 0)
+            amountLabel.BackgroundTransparency = 1
+            amountLabel.Text = "0"
+            amountLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            amountLabel.TextSize = 16
+            amountLabel.Font = Enum.Font.GothamBold
+            amountLabel.TextStrokeTransparency = 0.5
+            amountLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+            amountLabel.Parent = frame
+            Reference[generatorAdornee] = {
+                billboard = billboard,
+                timerLabel = timerLabel,
+                amountLabel = amountLabel,
+                genType = genType,
+                position = position,
+                teamId = teamId,
+                isTeamGen = false
+            }
+        end
     end
 
-    KitRender = vape.Categories.Utility:CreateModule({
-        Name = "KitRender",
-        Tooltip = "Shows everyone's kit during kit phase (for 5v5 or Squads)",
+    local function updateESP(generatorAdornee)
+        local ref = Reference[generatorAdornee]
+        if not ref then return end
+        if UIStyle.Value == 'Compact' then return end
+
+        if ref.isTeamGen then
+            if ref.tierLabel then
+                local tierTextLabel = getTierText(generatorAdornee)
+                if tierTextLabel and tierTextLabel.Text then
+                    ref.tierLabel.Text = extractTierLevel(tierTextLabel.Text)
+                else
+                    ref.tierLabel.Text = "0"
+                end
+            end
+            if ref.ironLabel then
+                ref.ironLabel.Text = tostring(getResourceCount(ref.position, 'iron'))
+            end
+            if ref.diamondLabel then
+                ref.diamondLabel.Text = tostring(getResourceCount(ref.position, 'diamond'))
+            end
+            if ref.emeraldLabel then
+                ref.emeraldLabel.Text = tostring(getResourceCount(ref.position, 'emerald'))
+            end
+        else
+            local countdownText = getCountdownText(generatorAdornee)
+            if countdownText and countdownText.Text then
+                local timeLeft = extractSecondsFromText(countdownText.Text)
+                if ref.timerLabel then
+                    ref.timerLabel.Text = string.format("%02d", timeLeft)
+                    if timeLeft <= 5 then
+                        ref.timerLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+                    elseif timeLeft <= 10 then
+                        ref.timerLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
+                    else
+                        ref.timerLabel.TextColor3 = generatorTypes[ref.genType].color
+                    end
+                end
+            else
+                if ref.timerLabel then
+                    ref.timerLabel.Text = "00"
+                    ref.timerLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+                end
+            end
+            if ref.amountLabel then
+                ref.amountLabel.Text = tostring(getResourceCount(ref.position, ref.genType))
+            end
+        end
+    end
+
+    local function processGeneratorAdornee(obj)
+        if obj.Name ~= 'GeneratorAdornee' then return end
+        local ok, generatorId = pcall(function() return obj:GetAttribute('Id') end)
+        if not ok then return end
+        if generatorId == nil then return end
+        if type(generatorId) ~= 'string' then return end
+        if generatorId == '' then return end
+
+        local position = obj:GetPivot().Position
+        local genType, config = getGeneratorType(generatorId)
+        if not genType or not config then return end
+
+        local teamId = getGeneratorTeamId(generatorId)
+        if isGeneratorEnabled(genType, teamId) then
+            createESP(obj, genType, config, position, teamId)
+        end
+    end
+
+    local function findAllGenerators()
+        for _, obj in pairs(workspace:GetDescendants()) do
+            pcall(processGeneratorAdornee, obj)
+        end
+    end
+
+    local function refreshESP()
+        clearAllESP()
+        if GeneratorESP.Enabled then
+            findAllGenerators()
+        end
+    end
+
+    local updateTimer = 0
+
+    GeneratorESP = vape.Categories.Render:CreateModule({
+        Name = 'GeneratorESP',
         Function = function(callback)
             if callback then
-                local draftApp = lplr.PlayerGui:FindFirstChild("MatchDraftApp")
-                local isSquads = draftApp and draftApp:FindFirstChild("MatchDraftTeamCardRow", true) ~= nil
-                local setupFn = isSquads and setupSquadsRender or setupKitRender
-				setupFn()
+                findAllGenerators()
+                rebuildCompactGenerators()
+
+                GeneratorESP:Clean(workspace.DescendantAdded:Connect(function(obj)
+                    if not GeneratorESP.Enabled then return end
+                    task.wait(0.2)
+                    pcall(processGeneratorAdornee, obj)
+                    if obj.Name == 'GeneratorAdornee' then
+                        rebuildCompactGenerators()
+                    end
+                end))
+
+                GeneratorESP:Clean(runService.Heartbeat:Connect(function(dt)
+                    if not GeneratorESP.Enabled then return end
+                    updateTimer = updateTimer + dt
+                    if updateTimer < 0.2 then return end
+                    updateTimer = 0
+                    for generatorAdornee, ref in pairs(Reference) do
+                        if generatorAdornee and generatorAdornee.Parent then
+                            updateESP(generatorAdornee)
+                        else
+                            if ref.billboard then ref.billboard:Destroy() end
+                            Reference[generatorAdornee] = nil
+                        end
+                    end
+                    updateCompactUI()
+                end))
+
+                GeneratorESP:Clean(workspace.DescendantRemoving:Connect(function(obj)
+                    if not GeneratorESP.Enabled then return end
+                    if Reference[obj] then
+                        if Reference[obj].billboard then Reference[obj].billboard:Destroy() end
+                        Reference[obj] = nil
+                    end
+                end))
             else
-                removeallkitrenders()
-                removeSquadsRender()
+                clearAllESP()
             end
+        end,
+        Tooltip = 'ESP for generators showing timer and item counts'
+    })
+
+    UIStyle = GeneratorESP:CreateDropdown({
+        Name = 'UI Style',
+        List = {'Original', 'Compact'},
+        Default = 'Original',
+        Function = function(val)
+            local isOriginal = val == 'Original'
+            if DiamondToggle then DiamondToggle.Object.Visible = isOriginal end
+            if EmeraldToggle then EmeraldToggle.Object.Visible = isOriginal end
+            if TeamGenToggle then TeamGenToggle.Object.Visible = isOriginal end
+            if ShowOwnTeamGen then ShowOwnTeamGen.Object.Visible = isOriginal and TeamGenToggle.Enabled end
+            if ShowEnemyTeamGen then ShowEnemyTeamGen.Object.Visible = isOriginal and TeamGenToggle.Enabled end
+            if CompactDiamondToggle then CompactDiamondToggle.Object.Visible = not isOriginal end
+            if CompactEmeraldToggle then CompactEmeraldToggle.Object.Visible = not isOriginal end
+            refreshESP()
+        end,
+        Tooltip = 'Choose between original billboard ESP or compact side UI'
+    })
+
+    DiamondToggle = GeneratorESP:CreateToggle({
+        Name = 'Diamond',
+        Function = function() refreshESP() end,
+        Default = false,
+        Visible = true
+    })
+
+    EmeraldToggle = GeneratorESP:CreateToggle({
+        Name = 'Emerald',
+        Function = function() refreshESP() end,
+        Default = false,
+        Visible = true
+    })
+
+    CompactDiamondToggle = GeneratorESP:CreateToggle({
+        Name = 'Compact Diamond',
+        Default = false,
+        Visible = false,
+        Function = function()
+            refreshESP()
         end
+    })
+
+    CompactEmeraldToggle = GeneratorESP:CreateToggle({
+        Name = 'Compact Emerald',
+        Default = false,
+        Visible = false,
+        Function = function()
+            refreshESP()
+        end
+    })
+
+    TeamGenToggle = GeneratorESP:CreateToggle({
+        Name = 'Team Generators',
+        Function = function(callback)
+            if ShowOwnTeamGen then ShowOwnTeamGen.Object.Visible = callback end
+            if ShowEnemyTeamGen then ShowEnemyTeamGen.Object.Visible = callback end
+            refreshESP()
+        end,
+        Default = true
+    })
+
+    ShowOwnTeamGen = GeneratorESP:CreateToggle({
+        Name = 'Show Own Team',
+        Function = function() refreshESP() end,
+        Default = false,
+        Visible = true
+    })
+
+    ShowEnemyTeamGen = GeneratorESP:CreateToggle({
+        Name = 'Show Enemy Teams',
+        Function = function() refreshESP() end,
+        Default = true,
+        Visible = true
+    })
+end)
+
+-- pastd but edited lol
+run(function()
+    local ChargePercent
+    local AutoChargeBow = {Enabled = false}
+    local old
+    
+    AutoChargeBow = vape.Categories.Combat:CreateModule({
+        Name = 'AutoChargeBow',
+        Function = function(callback)
+            if callback then
+                old = bedwars.ProjectileController.calculateImportantLaunchValues
+                bedwars.ProjectileController.calculateImportantLaunchValues = function(...)
+                    local result = old(...)
+                    if result then
+                        result.drawDurationSeconds = (ChargePercent.Value / 100) * 0.58
+                    end
+                    return result
+                end
+            else
+                if old then
+                    bedwars.ProjectileController.calculateImportantLaunchValues = old
+                    old = nil
+                end
+            end
+        end,
+        Tooltip = 'Automatically charges your bow with controllable charge percentage'
+    })
+
+    ChargePercent = AutoChargeBow:CreateSlider({
+        Name = 'Charge Percent',
+        Min = 0,
+        Max = 100,
+        Default = 100,
+        Suffix = '%',
+        Tooltip = 'Control bow charge percentage (affects damage): 100% = full damage, 50% = half damage, etc.'
+    })
+end)
+	
+-- had to fix this shit dev nocollision from strachLOL
+run(function()
+	local NoCollision
+	local defaults = {}
+	local function removeCollision()
+		for _, ent in entitylib.List do
+			if not ent.Character then continue end
+			for _, obj in ent.Character:GetDescendants() do
+				if obj:IsA('BasePart') then
+					table.insert(defaults, {Char=ent.Character,obj=obj, origColl = obj.CanCollide, origQuery = obj.CanQuery, isQueryIgnored = obj:GetAttribute('gamecore_GameQueryIgnore') or false})
+					if obj:GetAttribute('gamecore_GameQueryIgnore') then
+						bedwars.QueryUtil:setQueryIgnored(obj,false)
+					end
+					bedwars.QueryUtil:setQueryIgnored(obj,true)
+					obj.CanCollide = false
+					obj.CanQuery = false
+				end
+			end
+		end
+	end
+
+	local function reAddCollisions()
+		for _, ent in entitylib.List do
+			for i, val in defaults do
+				if val.Char == ent.Character then
+					for _, obj in ent.Character:GetDescendants() do
+						if obj:IsA('BasePart') then
+							obj.CanCollide = val.origColl
+							obj.CanQuery = val.origQuery
+							bedwars.QueryUtil:setQueryIgnored(obj,val.isQueryIgnored)
+						end
+					end
+					table.remove(defaults,i)
+				end
+			end
+		end
+	end
+
+	NoCollision = vape.Categories.World:CreateModule({
+		Name = 'NoCollision', 
+		Function = function(callback)
+			if callback then
+				removeCollision()
+				NoCollision:Clean(entitylib.Events.EntityAdded:Connect(removeCollision))
+				NoCollision:Clean(entitylib.Events.EntityRemoved:Connect(removeCollision))
+				NoCollision:Clean(entitylib.Events.EntityUpdated:Connect(removeCollision))
+			else
+				reAddCollisions()
+			end
+		end
+	})
+end)
+
+
+run(function()
+    local KitRender
+
+    local function getKitMeta(player)
+    	local kit = player:GetAttribute('PlayingAsKits') or player:GetAttribute('PlayingAsKit') or 'none'
+    	return bedwars.BedwarsKitMeta[kit] or bedwars.BedwarsKitMeta.none
+    end
+
+    local function getPlayerFromDraft(render, name)
+    	local id = render and render:match('id=(%d+)')
+    	if id then
+    		local player = playersService:GetPlayerByUserId(tonumber(id))
+    		if player then
+    			return player
+    		end
+    	end
+
+    	for _, v in playersService:GetPlayers() do
+    		if render and render:find('id=' .. v.UserId, 1, true) then
+    			return v
+    		end
+
+    		if name and (v.Name == name or v.DisplayName == name or v:GetAttribute('DisguiseDisplayName') == name) then
+    			return v
+    		end
+
+    		local displayName
+    		pcall(function()
+    			displayName = bedwars.StreamerModeController:getDisplayName(v)
+    		end)
+    		if name and displayName == name then
+    			return v
+    		end
+    	end
+    	return nil
+    end
+
+    local waitForChild = function(start, ...)
+    	local parent = start
+    	for _, v in {...} do
+    		parent = parent and parent:WaitForChild(v, 5)
+    		if not parent then
+    			break
+    		end
+    	end
+    	return parent
+    end
+
+    local function getPlayerName(card)
+    	local textbar = card and card:FindFirstChild('TextBackgroundBar')
+    	local label = textbar and textbar:FindFirstChild('PlayerName') or card and card:FindFirstChild('PlayerName', true)
+    	return label and label.Text or ''
+    end
+
+    local function getDraftCard(container)
+    	if not container then
+    		return
+    	end
+    	return container.Name == 'MatchDraftPlayerCard' and container or container:FindFirstChild('MatchDraftPlayerCard', true)
+    end
+
+    local function callback5v5(v, plr)
+    	if not v then
+    		return
+    	end
+    	local render = v:FindFirstChild('PlayerRender', true)
+    	local player = plr or getPlayerFromDraft(render and render.Image or '', getPlayerName(v))
+
+    	if player then
+    		local kitImage = getKitMeta(player)
+    		local roact = v:FindFirstChild('KitRenderImage')
+
+    		if not roact then
+    			roact = Instance.new('ImageLabel', v)
+    			roact.BackgroundTransparency = 1
+    			roact.AnchorPoint = Vector2.new(1, 0.5)
+    			roact.Position = UDim2.fromScale(1.05, 0.5)
+    			roact.Name = 'KitRenderImage'
+    			roact.Size = UDim2.fromScale(1.5, 1.5)
+    			roact.ZIndex = 1
+    			roact.ImageTransparency = 0.4
+    			roact.SliceCenter = Rect.new(0, 0, 0, 0)
+    			roact.SliceScale = 1
+    			roact.ScaleType = Enum.ScaleType.Crop
+
+    			KitRender:Clean(roact)
+
+    			local ratio = Instance.new('UIAspectRatioConstraint', roact)
+    			ratio.Name = '1'
+    			ratio.AspectRatio = 1
+    			ratio.AspectType = Enum.AspectType.FitWithinMaxSize
+    			ratio.DominantAxis = Enum.DominantAxis.Width
+    		end
+
+    		roact.Image = kitImage.renderImage
+    		roact.Position = UDim2.fromScale(1.05, 0)
+    		tweenService:Create(roact, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Position = UDim2.fromScale(1.05, 0.4)}):Play()
+
+    		local function update()
+    			kitImage = getKitMeta(player)
+    			roact.Image = kitImage.renderImage
+    		end
+
+    		KitRender:Clean(player:GetAttributeChangedSignal('PlayingAsKits'):Connect(update))
+    	end
+    end
+
+    local function callbacksquad(v)
+    	if not v then
+    		return
+    	end
+    	local render = v:FindFirstChild('PlayerRender', true)
+    	local player = render and getPlayerFromDraft(render.Image, '') or nil
+
+    	if player then
+    		local kitImage = getKitMeta(player)
+    		local Roact = v:FindFirstChild('KitRenderImage')
+
+    		if not Roact then
+    			local base = v:FindFirstChild('3') or v:WaitForChild('3', 5)
+    			if not base then
+    				return
+    			end
+    			Roact = base:Clone()
+    			Roact.Parent = v
+    			Roact.Name = 'KitRenderImage'
+    			KitRender:Clean(Roact)
+    		end
+
+    		Roact.Image = kitImage.renderImage
+
+    		KitRender:Clean(render:GetPropertyChangedSignal('Image'):Connect(function()
+    			local newplayer = getPlayerFromDraft(render.Image, '')
+    			if newplayer then
+    				player = newplayer
+    				kitImage = getKitMeta(player)
+    				Roact.Image = kitImage.renderImage
+    			end
+    		end))
+
+    		local function update()
+    			kitImage = getKitMeta(player)
+    			Roact.Image = kitImage.renderImage
+    		end
+
+    		KitRender:Clean(player:GetAttributeChangedSignal('PlayingAsKits'):Connect(update))
+    	end
+    end
+
+    local function setup5v5(DraftApp)
+    	local Background = DraftApp:FindFirstChild('DraftAppBackground')
+    	local BodyContainer = Background and Background:FindFirstChild('1') and Background['1']:FindFirstChild('BodyContainer')
+    	local hooked = false
+
+    	local i = 2
+    		local dtc = BodyContainer and BodyContainer:FindFirstChild('Team'..i..'Column')
+    		if dtc then
+    			hooked = true
+    			KitRender:Clean(dtc.ChildAdded:Connect(function(child)
+    				task.delay(0.2, function()
+    					if KitRender.Enabled then
+    						callback5v5(getDraftCard(child))
+    					end
+    				end)
+    			end))
+
+    			for _, v in dtc:GetChildren() do
+    				if v:IsA('Frame') then
+    					callback5v5(getDraftCard(v))
+    				end
+    			end
+    		end
+    	end
+
+    	if not hooked then
+    		for _, label in DraftApp:GetDescendants() do
+    			if label:IsA('TextLabel') and label.Name == 'PlayerName' then
+    				local container = label.Parent
+    				for _ = 1, 3 do
+    					container = container and container.Parent
+    				end
+    				if container then
+    					callback5v5(getDraftCard(container))
+    				end
+    			end
+    		end
+
+    		KitRender:Clean(DraftApp.DescendantAdded:Connect(function(child)
+    			if child:IsA('TextLabel') and child.Name == 'PlayerName' then
+    				task.delay(0.2, function()
+    					local container = child.Parent
+    					for _ = 1, 3 do
+    						container = container and container.Parent
+    					end
+    					if KitRender.Enabled and container then
+    						callback5v5(getDraftCard(container))
+    					end
+    				end)
+    			end
+    		end))
+    	end
+
+    	return hooked
+    end
+
+    local function setupSquad(DraftApp)
+    	local Background = DraftApp:FindFirstChild(`DraftAppBackground`)
+    	local BodyContainer = Background and Background:FindFirstChild('1') and Background['1']:FindFirstChild('BodyContainer')
+    	local TeamsColumn = BodyContainer and BodyContainer:FindFirstChild('TeamsColumn')
+    	if not TeamsColumn then
+    		return
+    	end
+
+    	for _, v: Instance in TeamsColumn:GetChildren() do
+    		if v:IsA('Frame') then
+    			local plrframe = waitForChild(v, '1', '2', '4')
+    			if plrframe then
+    				for _, plr in plrframe:GetChildren() do
+    					callbacksquad(plr)
+    				end
+
+    				KitRender:Clean(plrframe.ChildAdded:Connect(function(plr)
+    					KitRender:Toggle()
+    					KitRender:Toggle()
+    				end))
+    			end
+    		end
+    	end
+    end
+
+	local function removeeverything(app)
+		for i, v in app:GetDescendants() do 
+			if v:IsA('ImageLabel') then
+				if v.Name == 'KitRenderImage' then
+					pcall(function()
+						v:Destroy()
+					end)
+				end
+			end
+		end
+	end
+
+    KitRender = vape.Categories.Render:CreateModule({
+    	Name = 'KitRender',
+    	Function = function(call)
+    		if call then
+    			local DraftApp = lplr.PlayerGui:WaitForChild('MatchDraftApp', 9e9)
+    			setup5v5(DraftApp)
+    			setupSquad(DraftApp)
+			else
+				local app = lplr.PlayerGui:WaitForChild('MatchDraftApp', 9e9)
+				removeeverything(app)
+    		end
+    	end,
+    	Tooltip = 'Allows you to see the other opponent kits'
     })
 end)
