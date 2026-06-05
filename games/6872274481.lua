@@ -10453,7 +10453,7 @@ run(function()
     	local hooked = false
 
     	local i = 2
-    		local dtc = BodyContainer and BodyContainer:FindFirstChild('Team'..i..'Column')
+    		local dtc = BodyContainer and BodyContainer:FindFirstChild('Team'..i or 2..'Column')
     		if dtc then
     			hooked = true
     			KitRender:Clean(dtc.ChildAdded:Connect(function(child)
@@ -10504,7 +10504,7 @@ run(function()
     end
 
     local function setupSquad(DraftApp)
-    	local Background = DraftApp:FindFirstChild(`DraftAppBackground`)
+    	local Background = DraftApp:FindFirstChild('DraftAppBackground')
     	local BodyContainer = Background and Background:FindFirstChild('1') and Background['1']:FindFirstChild('BodyContainer')
     	local TeamsColumn = BodyContainer and BodyContainer:FindFirstChild('TeamsColumn')
     	if not TeamsColumn then
