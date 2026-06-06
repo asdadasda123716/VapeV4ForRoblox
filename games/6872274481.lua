@@ -9170,6 +9170,7 @@ end)
 									winEffectType = NameToId[List.Value],
 									winningPlayer = lplr
 								})
+								print('ok')
 							end
 						end
 					end))
