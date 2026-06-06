@@ -9161,6 +9161,7 @@ end)
 					WinEffect:Clean(vapeEvents.MatchEndEvent.Event:Connect(function()
 						for _, val in getconnections(bedwars.Client:Get('WinEffectTriggered').instance.OnClientEvent) do
 							local func = (val.Function or val.Callback or val[1])
+							print(func)
 							if func then
 								if not old then
 									old = bedwars.WinEffect.winEffectType
