@@ -1,6 +1,3 @@
---This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
---This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
---This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 	local run = function(func)
 		func()
 	end
@@ -929,7 +926,6 @@ end
 			WeldTable = require(replicatedStorage.TS.util['weld-util']).WeldUtil,
 			WinEffectMeta = require(replicatedStorage.TS.locker['win-effect']['win-effect-meta']).WinEffectMeta,
 			ZapNetworking = require(lplr.PlayerScripts.TS.lib.network),
-			WinEffect = require(lplr.PlayerScripts.TS.controllers.game.locker["win-effect"]["win-effect"]).WinEffect,
 		}, {
 			__index = function(self, ind)
 				rawset(self, ind, Knit.Controllers[ind])
@@ -9148,66 +9144,40 @@ end)
 	end)
 		
 	run(function()
-	    local WinEffect
-	    local List
-	    local NameToId = {}
-	    
-		local old = nil
-	
-	    WinEffect = vape.Categories.Legit:CreateModule({
-	        Name = "WinEffect",
-	        Function = function(callback)
-	            if callback then
+		local WinEffect
+		local List
+		local NameToId = {}
+		
+		WinEffect = vape.Legit:CreateModule({
+			Name = 'WinEffect',
+			Function = function(callback)
+				if callback then
 					WinEffect:Clean(vapeEvents.MatchEndEvent.Event:Connect(function()
-						for _, val in getconnections(bedwars.Client:Get('WinEffectTriggered').instance.OnClientEvent) do
-							local func = (val.Function or val.Callback or val[1])
-							print(func)
-							if func then
-								if not old then
-									old = bedwars.WinEffect.winEffectType
-								end
-								bedwars.WinEffect.winEffectType = NameToId[List.Value]
-								firesignal(bedwars.Client:Get('WinEffectTriggered').instance,{
+						for i, v in getconnections(bedwars.Client:Get('WinEffectTriggered').instance.OnClientEvent) do
+							if v.Function then
+								v.Function({
 									winEffectType = NameToId[List.Value],
 									winningPlayer = lplr
 								})
-								print('ok')
 							end
 						end
 					end))
-					if not old then
-						old = bedwars.WinEffect.winEffectType
-					end
-				else
-					if old then
-						bedwars.WinEffect.winEffectType = old
-					end
-					old = nil
-	            end
-	        end,
-	        Tooltip = "Allows you to select any clientside win effect"
-	    })
-	    
-	    local WinEffectName = {}
-	    for i, v in bedwars.WinEffectMeta do
-	        table.insert(WinEffectName, v.name)
-	        NameToId[v.name] = i
-	    end
-	    table.sort(WinEffectName)
-	    
-	    List = WinEffect:CreateDropdown({
-	        Name = "Effects",
-	        List = WinEffectName,
-			Function = function(Val)
-				if WinEffect.Enabled then
-					if not old then
-						old = bedwars.WinEffect.winEffectType
-					end
-					bedwars.WinEffect.winEffectType = NameToId[Val]
 				end
-			end
-	    })
+			end,
+			Tooltip = 'Allows you to select any clientside win effect'
+		})
+		local WinEffectName = {}
+		for i, v in bedwars.WinEffectMeta do
+			table.insert(WinEffectName, v.name)
+			NameToId[v.name] = i
+		end
+		table.sort(WinEffectName)
+		List = WinEffect:CreateDropdown({
+			Name = 'Effects',
+			List = WinEffectName
+		})
 	end)
+
 
 
 	run(function()
