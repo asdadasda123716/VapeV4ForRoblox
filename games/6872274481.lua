@@ -5969,6 +5969,7 @@ end)
 		
 	run(function()
 		local AutoTool
+		local Click
 		local old, event
 		
 		local function switchHotbarItem(block)
@@ -5980,8 +5981,10 @@ end)
 					end
 		
 					if hotbarSwitch(slot) then
-						if inputService:IsMouseButtonPressed(0) then 
-							event:Fire() 
+						if Click.Enabled then
+							if inputService:IsMouseButtonPressed(0) then 
+								event:Fire() 
+							end
 						end
 						return true
 					end
@@ -6010,6 +6013,10 @@ end)
 				end
 			end,
 			Tooltip = 'Automatically selects the correct tool'
+		})
+		Click = AutoTool:CreateToggle({
+			Name = "Should Click",
+			Default = true
 		})
 	end)
 		
