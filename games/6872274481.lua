@@ -2843,83 +2843,7 @@ run(function()
 	})
 end)
 
-run(function()
-	local FastBreak
-	local Blacklist
-	local List
-	local Time
-	local old = nil
 
-	local function blacklisted(blockName)
-		if not Blacklist.Enabled then return false end
-		for _, entry in List.ListEnabled do
-			if entry:find(blockName) then
-				return true
-			end
-		end
-		return false
-	end
-
-	FastBreak = vape.Categories.Blatant:CreateModule({
-		Name = 'Fast Break',
-		Function = function(callback)
-			if callback then
-				old = clonefunction(bedwars.BlockBreaker.hitBlock)
-				hookfunction(bedwars.BlockBreaker.hitBlock, function(self, maid, raycastparms, ...)
-					local block = self.clientManager:getBlockSelector():getMouseInfo(1, {
-						ray = raycastparms
-					})
-					if block then
-						block = block.target and block.target.blockInstance
-						if not blacklisted(block.Name) then
-							bedwars.BlockBreakController.blockBreaker:setCooldown(Time.Value)
-						else
-							bedwars.BlockBreakController.blockBreaker:setCooldown(0.3)	
-						end
-					end
-
-					return old(self, maid, raycastparms, ...)
-				end)
-				repeat
-					if tick() - store.lastHit > 0.3 then
-						bedwars.BlockBreakController.blockBreaker:setCooldown(0.3)
-					end
-					task.wait()
-				until not FastBreak.Enabled
-			else
-				local suc, res = pcall(function()
-					restorefunction(bedwars.BlockBreaker.hitBlock)
-				end)
-				if not suc then
-					bedwars.BlockBreaker.hitBlock = old
-				end
-				old = nil
-			end
-		end,
-		Tooltip = 'allows you to edit block hit cooldown'
-	})
-	Blacklist = FastBreak:CreateToggle({
-		Name = 'Blacklist',
-		Tooltip = 'Enables the blacklist on breaking blocks faster',
-		Function = function(callback)
-			if List then List.Object.Visible = callback end
-		end
-	})
-	List = FastBreak:CreateTextList({
-		Name = 'List',
-		Tooltip = 'To blacklist beds type "bed" in order to blacklist all beds',
-		Darker = true,
-		Visible = Blacklist.Enabled
-	})
-	Time = FastBreak:CreateSlider({
-		Name = 'Break speed',
-		Min = 0,
-		Max = 0.3,
-		Default = 0.25,
-		Decimal = 100,
-		Suffix = 'seconds'
-	})
-end)
 
 local Fly
 local LongJump
@@ -6637,7 +6561,7 @@ run(function()
 	end
 
 	local function refreshRenders(app)
-		print('yo')
+		task.wait(0.15)
 		for _, obj in app:GetDescendants() do
 			local render = obj:FindFirstChild("PlayerRender", true)
 			if not render then
