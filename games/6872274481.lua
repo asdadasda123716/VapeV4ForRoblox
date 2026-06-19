@@ -2132,35 +2132,33 @@ run(function()
 		Name = 'Reach',
 		Function = function(callback)
 			if callback then
-				olds.attack = CombatConstant.RAYCAST_SWORD_CHARACTER_DISTANCE
-				CombatConstant.RAYCAST_SWORD_CHARACTER_DISTANCE = AttackToggle.Enabled and Attack.Value + 2 or olds.Attack
+				olds.attack = bedwars.CombatConstant.RAYCAST_SWORD_CHARACTER_DISTANCE
+				bedwars.CombatConstant.RAYCAST_SWORD_CHARACTER_DISTANCE = AttackToggle.Enabled and (Attack.Value + 2) or olds.attack
 				olds.func = clonefunction(bedwars.BlockSelector.getMouseInfo)
-				hookfunction(bedwars.BlockSelector.getMouseInfo, function(...)
-					local self, sel, args = ...
-					if not args then args = {} end
-					if sel == 0 then
+				hookfunction(bedwars.BlockSelector.getMouseInfo, function(self, selectType, args)
+					args = args or {}
+					if selectType == 0 and PlaceToggle.Enabled then
 						olds.place = args.range
-						args.range = PlaceToggle.Enabled and Place.Value or olds.place
-					elseif sel == 1 then
+						args.range = Place.Value
+					elseif selectType == 1 and MineToggle.Enabled then
 						olds.mine = args.range
-						args.range = MineToggle.Enabled and Mine.Value or olds.mine
+						args.range = Mine.Value
 					end
-					return olds.func(sel, sel, args)
+					return olds.func(self, selectType, args)
 				end)
 			else
-				local suc, res = pcall(function()
+				pcall(function()
 					restorefunction(bedwars.BlockSelector.getMouseInfo)
 				end)
-				if not suc then
+				if olds.func then
 					bedwars.BlockSelector.getMouseInfo = olds.func
 				end
-				CombatConstant.RAYCAST_SWORD_CHARACTER_DISTANCE = olds.attack
+				if olds.attack then
+					bedwars.CombatConstant.RAYCAST_SWORD_CHARACTER_DISTANCE = olds.attack
+				end
 				olds.func = nil
 				olds.attack = nil
-				olds.mine = nil
-				olds.place = nil
 			end
-			bedwars.CombatConstant.RAYCAST_SWORD_CHARACTER_DISTANCE = callback and Value.Value + 2 or 14.4
 		end,
 		Tooltip = 'Allows you to place, attack, and mine further.'
 	})
@@ -2843,6 +2841,82 @@ run(function()
 	})
 end)
 
+run(function()
+	local FastBreak
+	local Blacklist
+	local List
+	local Time
+	local old = nil
+
+	local function blacklisted(blockName)
+		if not Blacklist.Enabled then return false end
+		for _, entry in List.ListEnabled do
+			if entry:find(blockName) then
+				return true
+			end
+		end
+		return false
+	end
+
+	FastBreak = vape.Categories.Blatant:CreateModule({
+		Name = 'Fast Break',
+		Function = function(callback)
+			if callback then
+				old = clonefunction(bedwars.BlockBreaker.hitBlock)
+				hookfunction(bedwars.BlockBreaker.hitBlock, function(self,...)
+    				local _, params = unpack({ ... })
+    				local block, info = nil, self.clientManager:getBlockSelector():getMouseInfo(1, {ray = params})
+    				block = info and info.target and info.target.blockInstance or nil
+					if block then
+						if not blacklisted(block.Name) then
+							bedwars.BlockBreakController.blockBreaker:setCooldown(Time.Value)
+						else
+							bedwars.BlockBreakController.blockBreaker:setCooldown(0.3)	
+						end
+					end
+
+					return old(self, ...)
+				end)
+				repeat
+					if tick() - store.lastHit > 0.3 then
+						bedwars.BlockBreakController.blockBreaker:setCooldown(0.3)
+					end
+					task.wait()
+				until not FastBreak.Enabled
+			else
+				local suc, res = pcall(function()
+					restorefunction(bedwars.BlockBreaker.hitBlock)
+				end)
+				if not suc then
+					bedwars.BlockBreaker.hitBlock = old
+				end
+				old = nil
+			end
+		end,
+		Tooltip = 'allows you to edit block hit cooldown'
+	})
+	Blacklist = FastBreak:CreateToggle({
+		Name = 'Blacklist',
+		Tooltip = 'Enables the blacklist on breaking blocks faster',
+		Function = function(callback)
+			if List then List.Object.Visible = callback end
+		end
+	})
+	List = FastBreak:CreateTextList({
+		Name = 'List',
+		Tooltip = 'To blacklist beds type "bed" in order to blacklist all beds',
+		Darker = true,
+		Visible = Blacklist.Enabled
+	})
+	Time = FastBreak:CreateSlider({
+		Name = 'Break speed',
+		Min = 0,
+		Max = 0.3,
+		Default = 0.25,
+		Decimal = 100,
+		Suffix = 'seconds'
+	})
+end)
 
 
 local Fly
