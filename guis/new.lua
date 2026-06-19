@@ -5974,11 +5974,7 @@ mainapi.MultiKeybind = general:CreateToggle({
 	Name = 'Enable Multi-Keybinding',
 	Tooltip = 'Allows multiple keys to be bound to a module (eg. G + H)'
 })
-mainapi.ChangeLogs = General:CreateToggle({
-	Name = 'ChangeLogs',
-	Tooltip = 'Allows you to see or disable the changelog popping up every update',
-	Default = true
-})
+
 general:CreateButton({
 	Name = 'Reset current profile',
 	Function = function()
