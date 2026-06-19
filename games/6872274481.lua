@@ -6635,6 +6635,33 @@ run(function()
 		kit = kit or player:GetAttribute('PlayingAsKits') or 'none'
 		return bedwars.BedwarsKitMeta[kit] or bedwars.BedwarsKitMeta.none
 	end
+
+	local function refreshRenders(app)
+		print('yo')
+		for _, obj in app:GetDescendants() do
+			local render = obj:FindFirstChild("PlayerRender", true)
+			if not render then
+				warn('no render')
+				continue
+			end
+			local player = getPlayerFromDraft(render.Image, getPlayerName(obj))
+			if not player then
+				print('no player')
+				continue
+			end
+			local kitmeta = getKitMeta(player)
+			local kitRender = obj:FindFirstChild("KitRenderImage")
+			if not kitRender then
+				(g == "5" and callback5v5 or callbacksquad)(obj, player)
+				kitRender = obj:FindFirstChild("KitRenderImage")
+			end
+			if kitRender then
+				print('founded asnd resteddd')
+				kitRender.Image = kitmeta.renderImage
+			end
+		end
+	end
+
 	local function getPlayerFromDraft(render, name)
 		local id = render and render:match('id=(%d+)')
 		if id then
@@ -6864,31 +6891,7 @@ run(function()
 			end
 		end
 	end
-	local function refreshRenders(app)
-		print('yo')
-		for _, obj in app:GetDescendants() do
-			local render = obj:FindFirstChild("PlayerRender", true)
-			if not render then
-				warn('no render')
-				continue
-			end
-			local player = getPlayerFromDraft(render.Image, getPlayerName(obj))
-			if not player then
-				print('no player')
-				continue
-			end
-			local kitmeta = getKitMeta(player)
-			local kitRender = obj:FindFirstChild("KitRenderImage")
-			if not kitRender then
-				(g == "5" and callback5v5 or callbacksquad)(obj, player)
-				kitRender = obj:FindFirstChild("KitRenderImage")
-			end
-			if kitRender then
-				print('founded asnd resteddd')
-				kitRender.Image = kitmeta.renderImage
-			end
-		end
-	end
+
 	KitRender = vape.Categories.Render:CreateModule({
 		Name = 'Kit Render',
 		Function = function(callback)
@@ -9582,7 +9585,7 @@ run(function() -- had to fix this shit dev nocollision from strachLOL
 						origQuery = obj.CanQuery,
 					})
 				end
-				--obj.CanCollide = false
+				obj.CanCollide = false
 				obj.CanQuery = false
 			end
 		end
