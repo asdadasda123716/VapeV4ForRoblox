@@ -3399,7 +3399,7 @@ run(function()
 									continue
 								end
 								local actualRoot = v.Character.PrimaryPart
-								if actualRoot and (v.Humanoid.FloorMaterial ~= Enum.Material.Air or math.random(1, 100) < AirChance.Value) then
+								if actualRoot then
 									local dir = CFrame.lookAt(selfpos, actualRoot.Position).LookVector
 									local pos = selfpos + dir * math.max(delta.Magnitude - 14.399, 0)
 									swingCooldown = tick()
