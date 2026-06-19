@@ -20,6 +20,8 @@ local mainapi = {
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
 	Version = '4.18',
+	ChangeLogs = {},
+	AutoUpdate = {},
 	Windows = {}
 }
 
@@ -354,6 +356,13 @@ local function loadJson(path)
 	end)
 	return suc and type(res) == 'table' and res or nil
 end
+
+local newModules = {}
+if not isfile('newvape/profiles/modules.json') then
+	writefile('newvape/profiles/modules.json', httpService:JSONEncode({}))
+end
+
+newModules = loadJson('newvape/profiles/modules.json')
 
 local function makeDraggable(gui, window)
 	gui.InputBegan:Connect(function(inputObj)
@@ -3708,8 +3717,10 @@ function mainapi:CreateCategory(categorysettings)
 			Index = getTableSize(mainapi.Modules),
 			ExtraText = modulesettings.ExtraText,
 			Name = modulesettings.Name,
-			Category = categorysettings.Name
+			Category = categorysettings.Name,
+			Tags = {},
 		}
+
 
 		local hovered = false
 		local modulebutton = Instance.new('TextButton')
@@ -3724,6 +3735,23 @@ function mainapi:CreateCategory(categorysettings)
 		modulebutton.TextSize = 14
 		modulebutton.FontFace = uipallet.Font
 		modulebutton.Parent = children
+		local indicatorholder = Instance.new('Frame')
+		indicatorholder.Parent = modulebutton
+		indicatorholder.Size = UDim2.fromOffset(0, 21)
+		indicatorholder.AnchorPoint = Vector2.new(0, 0.5)
+		indicatorholder.Name = 'Indicators'
+		indicatorholder.BackgroundTransparency = 1
+		indicatorholder.Position = UDim2.fromScale(0.85, 0.5)
+
+		do
+			local layout = Instance.new('UIListLayout')
+			layout.Parent = indicatorholder
+			layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+			layout.VerticalAlignment = Enum.VerticalAlignment.Center
+			layout.FillDirection = Enum.FillDirection.Horizontal
+			layout.Padding = UDim.new(0, 5)
+		end
+
 		local gradient = Instance.new('UIGradient')
 		gradient.Rotation = 90
 		gradient.Enabled = false
@@ -3817,7 +3845,48 @@ function mainapi:CreateCategory(categorysettings)
 		divider.Parent = modulebutton
 		modulesettings.Function = modulesettings.Function or function() end
 		addMaid(moduleapi)
+		modulesettings.Tags = modulesettings.Tags or {}
 
+		pcall(function()
+			local modulesData = httpService:JSONDecode(readfile("newvape/profiles/modules.json"))
+			if not modulesData[moduleapi.Name] then
+				if not table.find(modulesettings.Tags, "new") then
+					table.insert(modulesettings.Tags, "new")
+				end
+				modulesData[moduleapi.Name] = {AddedTime=os.time()}
+				writefile("newvape/profiles/modules.json",httpService:JSONEncode(modulesData))
+				table.insert(newModules, moduleapi.Name)
+			end
+			for i, tag in modulesettings.Tags do
+				tag = tag:upper()
+				print(tag)
+				local size = getfontsize(removeTags(tag), 12, uipallet.Font, Vector2.new(100000, 100000))
+				local indicator = Instance.new('TextLabel')
+				indicator.LayoutOrder = i - 1
+				indicator.Size = UDim2.new(0, size.X + 4, 0, 21)
+				indicator.BackgroundColor3 = uipallet.Main
+				indicator.TextSize = 14
+				indicator.TextTransparency = 1
+				indicator.Text = tag
+				indicator.Name = tag
+				indicator.Position = UDim2.new()
+				indicator.TextColor3 = Color3.new(0, 0, 0)
+				indicator.FontFace = uipallet.Font
+				indicator.Parent = indicatorholder
+				addCorner(indicator, UDim.new(0, 5))
+				local text = indicator:Clone()
+				text.Position = UDim2.new()
+				text.Size = UDim2.fromScale(1, 1)
+				text.BackgroundTransparency = 1
+				text.Name = 'Text'
+				text.AnchorPoint = Vector2.new()
+				text.TextSize = 12
+				text.TextTransparency = 0
+				text.Parent = indicator
+				table.insert(moduleapi.Tags, indicator)
+				indicator.Visible = tag ~= 'MATCHED'
+			end
+		end)
 		function moduleapi:SetBind(tab, mouse)
 			if tab.Mobile then
 				createMobileButton(moduleapi, Vector2.new(tab.X, tab.Y))
@@ -5673,7 +5742,7 @@ local scarcitybanner = Instance.new('TextLabel')
 scarcitybanner.Size = UDim2.fromScale(1, 0.02)
 scarcitybanner.Position = UDim2.fromScale(0, 0.97)
 scarcitybanner.BackgroundTransparency = 1
-scarcitybanner.Text = 'A new discord has been created, click the discord icon to join.'
+scarcitybanner.Text = 'fuck up pussy.'
 scarcitybanner.TextScaled = true
 scarcitybanner.TextColor3 = Color3.new(1, 1, 1)
 scarcitybanner.TextStrokeTransparency = 0.5
@@ -5797,6 +5866,11 @@ mainapi:CreateCategory({
 	Icon = getcustomasset('newvape/assets/new/miniicon.png'),
 	Size = UDim2.fromOffset(19, 12)
 })
+mainapi:CreateCategory({
+	Name = 'Kits',
+	Icon = getcustomasset('newvape/assets/new/friendstab.png'),
+	Size = UDim2.fromOffset(17, 16)
+})
 mainapi.Categories.Main:CreateDivider('misc')
 
 --[[
@@ -5899,6 +5973,11 @@ local general = mainapi.Categories.Main:CreateSettingsPane({Name = 'General'})
 mainapi.MultiKeybind = general:CreateToggle({
 	Name = 'Enable Multi-Keybinding',
 	Tooltip = 'Allows multiple keys to be bound to a module (eg. G + H)'
+})
+mainapi.ChangeLogs = General:CreateToggle({
+	Name = 'ChangeLogs',
+	Tooltip = 'Allows you to see or disable the changelog popping up every update',
+	Default = true
 })
 general:CreateButton({
 	Name = 'Reset current profile',
@@ -6086,8 +6165,9 @@ guipane:CreateButton({
 			WorldCategory = 6,
 			InventoryCategory = 7,
 			MinigamesCategory = 8,
-			FriendsCategory = 9,
-			ProfilesCategory = 10
+			KitsCategory = 9,
+			FriendsCategory = 10,
+			ProfilesCategory = 11
 		}
 		local categories = {}
 		for _, v in mainapi.Categories do
@@ -6764,7 +6844,7 @@ function mainapi:UpdateTextGUI(afterload)
 				holdertext.Position = UDim2.fromOffset(right and 3 or 6, 2)
 				holdertext.BackgroundTransparency = 1
 				holdertext.BorderSizePixel = 0
-				holdertext.Text = i..(v.ExtraText and " <font color='#A8A8A8'>"..v.ExtraText()..'</font>' or '')
+				holdertext.Text = ({i:gsub(' ', '')})[1]..(v.ExtraText and " <font color='#A8A8A8'>"..v.ExtraText()..'</font>' or '')
 				holdertext.TextSize = 15
 				holdertext.FontFace = textguifont.Value
 				holdertext.RichText = true
@@ -6909,6 +6989,12 @@ function mainapi:UpdateGUI(hue, sat, val, default)
 			if option.Color then
 				option:Color(hue, sat, val, rainbow)
 			end
+		end
+
+		for _, v in button.Tags do
+			v.BackgroundColor3 = rainbow and Color3.fromHSV(mainapi:Color((hue - (button.Index * 0.025)) % 1)) or button.Enabled and Color3.new(1, 1, 1) or Color3.fromHSV(hue, sat, val)
+			v.BackgroundTransparency = (rainbow or not button.Enabled) and 0 or 0.85
+			v:FindFirstChild('Text').TextColor3 = mainapi.GUIColor.Rainbow and Color3.new(0.19, 0.19, 0.19) or mainapi:TextColor(hue, sat, val)
 		end
 	end
 
