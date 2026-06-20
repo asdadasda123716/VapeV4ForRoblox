@@ -2642,6 +2642,246 @@ end)
 	Blatant
 ]]--
 
+run(function() -- pasted but only razer uses so idrc
+	local NoFall
+	local NoFallMethod
+	local LimitToItems
+	local HealthCheck
+	local HealthThreshold
+
+	local function rakNetCheck(module)
+		if not (raknet and raknet.add_send_hook and pcall(raknet.add_send_hook, function() end)) then
+			vape:CreateNotification('Vape', 'This feature requires raknet!!!!', 10, 'warning')
+			return false
+		end
+		return true
+	end
+
+	local nfRakHookActive = false
+	local function nfRakHooked(packet)
+		if packet.AsArray[1] ~= 0x1b then return end
+		local data = packet.AsBuffer
+		buffer.writef32(data, 13, 0)
+		buffer.writef32(data, 17, 0)
+		buffer.writef32(data, 21, 0)
+		buffer.writef32(data, 25, 0)
+		buffer.writef32(data, 29, 0)
+		buffer.writef32(data, 33, 0)
+		packet:SetData(data)
+	end
+
+	local nfRayParams = RaycastParams.new()
+	nfRayParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+	local nfScanParams = RaycastParams.new()
+	nfScanParams.FilterType = Enum.RaycastFilterType.Exclude
+	nfScanParams.RespectCanCollide = true
+
+	local nfProjectileRemote = {InvokeServer = function() end}
+	task.spawn(function()
+		nfProjectileRemote = bedwars.Client:Get(remotes.FireProjectile).instance
+	end)
+
+	local function nfGetPearlSlot()
+		for i, v in store.inventory.hotbar do
+			if v.item and v.item.itemType == 'telepearl' then
+				return i - 1, v.item
+			end
+		end
+		return nil, nil
+	end
+
+	local function nfIsHoldingPearl()
+		if not entitylib.isAlive then return false end
+		local hand = store.inventory and store.inventory.inventory and store.inventory.inventory.hand
+		return hand and hand.itemType == 'telepearl'
+	end
+
+	local function nfThrowPearl(pos, spot, pearlTool)
+		local meta = bedwars.ProjectileMeta.telepearl
+		local offsets = {Vector3.new(0,-1.5,0), Vector3.new(0,0,0), Vector3.new(0,1,0), Vector3.new(0,-3,0)}
+		local calc
+		for _, offset in offsets do
+			calc = prediction.SolveTrajectory(pos, meta.launchVelocity, meta.gravitationalAcceleration, spot + offset, Vector3.zero, workspace.Gravity, 0, 0, nil, false, lplr:GetNetworkPing())
+			local targetRoot = plr.RootPart
+						if targetRoot then
+							local targetRootVel = targetRoot.AssemblyLinearVelocity or targetRoot.Velocity or Vector3.zero
+							local targetMovingUp = targetRootVel.Y > 3
+							local heightDiff = aimTarget.Y - newlook.p.Y
+							if targetMovingUp then
+								aimTarget = aimTarget + Vector3.new(0, math.clamp(targetRootVel.Y * 0.08, 0.5, 3.5), 0)
+							elseif heightDiff < -8 then
+								aimTarget = aimTarget + Vector3.new(0, math.clamp(math.abs(heightDiff) * 0.04, 0.3, 2.5), 0)
+							end
+						end
+						if calc then break end
+		end
+		if not calc then return false end
+		local dir = CFrame.lookAt(pos, calc).LookVector * meta.launchVelocity
+		nfProjectileRemote:InvokeServer(pearlTool, 'telepearl', 'telepearl', pos, pos, dir, httpService:GenerateGUID(true), {drawDurationSeconds = 1, shotId = httpService:GenerateGUID(false)}, workspace:GetServerTimeNow() - 0.045)
+		return true
+	end
+
+	local function nfIsValidSpot(pos)
+		local headCheck = workspace:Raycast(pos + Vector3.new(0,0.1,0), Vector3.new(0,3,0), nfScanParams)
+		if headCheck then return false end
+		local groundCheck = workspace:Raycast(pos + Vector3.new(0,0.5,0), Vector3.new(0,-2,0), nfScanParams)
+		return groundCheck ~= nil
+	end
+
+	local function nfFindSpot(origin)
+		local char = lplr.Character
+		if not char then return nil end
+		nfScanParams.FilterDescendantsInstances = {char, gameCamera}
+		local downRay = workspace:Raycast(origin, Vector3.new(0, -200, 0), nfScanParams)
+		if not downRay then return nil end
+		local spot = downRay.Position + Vector3.new(0, 0.1, 0)
+		if not nfIsValidSpot(spot) then return nil end
+		return spot
+	end
+
+	local function nfDoPearl(pos, spot)
+		local pearlSlot, pearlItem = nfGetPearlSlot()
+		if not pearlSlot or not pearlItem then return end
+		if LimitToItems.Enabled then
+			if not nfIsHoldingPearl() then return end
+			nfThrowPearl(pos, spot, pearlItem.tool)
+			return
+		end
+		local originalSlot = store.inventory.hotbarSlot
+		if nfIsHoldingPearl() then
+			nfThrowPearl(pos, spot, pearlItem.tool)
+		else
+			hotbarSwitch(pearlSlot)
+			task.wait(0.05)
+			nfThrowPearl(pos, spot, pearlItem.tool)
+			task.wait(0.05)
+			hotbarSwitch(originalSlot)
+		end
+	end
+
+	NoFall = vape.Categories.Blatant:CreateModule({
+		Name = 'No Fall V2',
+		Tooltip = '[BETA] skidded not mines idgaf tho',
+		Function = function(callback)
+			if callback then
+				local fallStartY = nil
+				local pearlFired = false
+				local cooldown = 0
+				local pearlCountAtFallStart = nil
+				local manualThrowTime = nil
+				nfRayParams.FilterDescendantsInstances = {lplr.Character, gameCamera}
+				repeat
+					if entitylib.isAlive then
+						local root = entitylib.character.RootPart
+						local velY = root.AssemblyLinearVelocity.Y
+						local falling = velY < -10
+						local currentTime = tick()
+						local pearl = getItem('telepearl')
+						local currentPearlCount = pearl and pearl.amount or 0
+
+						if not falling then
+							fallStartY = nil
+							pearlFired = false
+							pearlCountAtFallStart = nil
+							manualThrowTime = nil
+						else
+							if not fallStartY then
+								fallStartY = root.Position.Y
+								pearlCountAtFallStart = currentPearlCount
+							end
+						end
+
+						if pearlCountAtFallStart ~= nil and currentPearlCount < pearlCountAtFallStart and not pearlFired then
+							manualThrowTime = currentTime
+							pearlCountAtFallStart = currentPearlCount
+						end
+
+						local blockedByManual = manualThrowTime and (currentTime - manualThrowTime) < 3
+
+						local fallHeight = fallStartY and ((fallStartY - root.Position.Y) / 3) or 0
+						local groundRay = workspace:Raycast(root.Position, Vector3.new(0, -99935, 0), nfRayParams)
+
+						local healthOk = true
+						if HealthCheck and HealthCheck.Enabled then
+							local hp = lplr.Character:GetAttribute('Health') or 100
+							healthOk = hp <= (HealthThreshold and HealthThreshold.Value or 50)
+						end
+						if falling and groundRay and fallHeight >= 7 and not pearlFired and not blockedByManual and (currentTime - cooldown) > 1 and healthOk then
+							local method = NoFallMethod and NoFallMethod.Value or 'TelePearl'
+							if method == 'TelePearl' then
+								if pearl then
+									pearlFired = true
+									cooldown = currentTime
+									local spot = nfFindSpot(root.Position)
+									if spot then
+										task.spawn(nfDoPearl, root.Position, spot)
+									end
+								end
+							elseif method == 'Raknet' then
+								if not nfRakHookActive then
+									if not rakNetCheck(NoFall) then
+										NoFallMethod.Value = 'TelePearl'
+									else
+										nfRakHookActive = true
+										raknet.add_send_hook(nfRakHooked)
+									end
+								end
+							end
+						end
+					end
+					task.wait(0.05)
+				until not NoFall.Enabled
+			else
+				if nfRakHookActive then
+					pcall(raknet.remove_send_hook, nfRakHooked)
+					nfRakHookActive = false
+				end
+			end
+		end
+	})
+
+	NoFallMethod = NoFall:CreateDropdown({
+		Name = 'Method',
+		List = raknet and raknet.add_send_hook and {'TelePearl', 'Raknet'} or {'TelePearl'},
+		Default = 'TelePearl',
+		Tooltip = 'more coming!!',
+		Function = function(v)
+			if LimitToItems then
+				LimitToItems.Object.Visible = v == 'TelePearl'
+			end
+			if v ~= 'Raknet' and nfRakHookActive then
+				pcall(raknet.remove_send_hook, nfRakHooked)
+				nfRakHookActive = false
+			end
+		end
+	})
+
+	LimitToItems = NoFall:CreateToggle({
+		Name = 'Limit to Pearl',
+		Default = false,
+		Tooltip = 'Only pearls when already holding pearl'
+	})
+	HealthCheck = NoFall:CreateToggle({
+		Name = 'HP Threshold',
+		Default = false,
+		Tooltip = 'Only pearls when HP is at or below the set value',
+		Function = function(callback)
+			if HealthThreshold and HealthThreshold.Object then
+				HealthThreshold.Object.Visible = callback
+			end
+		end
+	})
+	HealthThreshold = NoFall:CreateSlider({
+		Name = 'Health',
+		Min = 1,
+		Max = 100,
+		Default = 50,
+		Suffix = 'hp',
+		Visible = false
+	})
+end)
+																					
 run(function()
 	local BlockCPSRemover
 	local CPS
