@@ -10906,3 +10906,49 @@ run(function()
 		Tooltip = 'Removes block textures but keeps colors'
 	})
 end)
+
+run(function()
+    local BDAFR
+    local typ
+    local projectileRemote = { InvokeServer = function(self, ...) end }
+    task.spawn(function()
+    	projectileRemote = bedwars.Client:Get(remotes.FireProjectile).instance
+    end)
+    local list = {}
+    BDAFR = vape.Categories.Minigames:CreateModule({
+        Name = 'BDAFR',
+        Tooltip = 'Granddad Exploit BDAFR.',
+        ExtraText = 'bedwars exploit lel',
+        Function = function(callback)
+            if not callback then return end
+            if not replicatedStorage:WaitForChild("Inventories"):WaitForChild(lplr):FindFirstChild("snowball") then vape:CreateNotification('BDAFR', 'missing snowball', 8, 'warning') end
+            local _, res = pcall(function()
+                return projectileRemote:InvokeServer(
+                    replicatedStorage:WaitForChild("Inventories"):WaitForChild(lplr):WaitForChild("snowball"), 
+                    'snowball',
+                    tostring(typ.Value),
+                    lplr.Character.HumanoidRootPart.Position,
+                    lplr.Character.HumanoidRootPart.Position,
+                    Vector3.new(0,5,0)
+                    httpService:GenerateGUID(false),
+                    {
+                        shotId = httpService:GenerateGUID(false),
+                        drawDurationSec = 1
+                    },
+                    workspace:GetServerTimeNow() - 0.045
+                )
+            end)
+            if res then
+                vape:CreateNotification('BDAFR', 'funny happen! lel', 6)
+            end
+            BDAFR:Toggle()
+        end
+    })
+    for i in bedwars.ProjectileMeta do
+        table.insert(list, i) 
+    end
+    typ = BDAFR:CreateDropdown({
+        Name = 'Projectile',
+        List = list,
+    })
+end)
