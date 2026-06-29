@@ -10915,33 +10915,62 @@ run(function()
     	projectileRemote = bedwars.Client:Get(remotes.FireProjectile).instance
     end)
     local list = {}
+
+	local function getNearestPlayer()
+		local nearest = nil
+		local distance = math.huge
+		local myRoot = lplr.Character and lplr.Character:FindFirstChild("HumanoidRootPart")
+
+		if not myRoot then return end
+
+		for _, plr in ipairs(game.Players:GetPlayers()) do
+			if plr ~= lplr and plr.Character then
+				local root = plr.Character:FindFirstChild("HumanoidRootPart")
+				local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+
+				if root and hum and hum.Health > 0 then
+					local dist = (root.Position - myRoot.Position).Magnitude
+
+					if dist < distance then
+						distance = dist
+						nearest = root
+					end
+				end
+			end
+		end
+
+		return nearest
+	end
+
     BDAFR = vape.Categories.Minigames:CreateModule({
         Name = 'BDAFR',
         Tooltip = 'Granddad Exploit BDAFR.',
         ExtraText = 'bedwars exploit lel',
         Function = function(callback)
             if not callback then return end
-            if not replicatedStorage:WaitForChild("Inventories"):WaitForChild(lplr):FindFirstChild("snowball") then vape:CreateNotification('BDAFR', 'missing snowball', 8, 'warning') end
-            local _, res = pcall(function()
-                return projectileRemote:InvokeServer(
-                    replicatedStorage:WaitForChild("Inventories"):WaitForChild(lplr):WaitForChild("snowball"), 
-                    'snowball',
-                    tostring(typ.Value),
-                    lplr.Character.HumanoidRootPart.Position,
-                    lplr.Character.HumanoidRootPart.Position,
-                    Vector3.new(0,5,0),
-                    httpService:GenerateGUID(false),
-                    {
-                        shotId = httpService:GenerateGUID(false),
-                        drawDurationSec = 1
-                    },
-                    workspace:GetServerTimeNow() - 0.045
-                )
-            end)
-            if res then
-                vape:CreateNotification('BDAFR', 'funny happen! lel', 6)
-            end
-            BDAFR:Toggle()
+			local targetRoot = getNearestPlayer()
+			if targetRoot then
+				switchItem(replicatedStorage:WaitForChild("Inventories"):WaitForChild(lplr.Name):WaitForChild("snowball"))
+				local _, res = pcall(function()
+					return projectileRemote:InvokeServer(
+						replicatedStorage:WaitForChild("Inventories"):WaitForChild(lplr.Name):WaitForChild("snowball"),
+						'snowball',
+						tostring(typ.Value),
+						targetRoot.Position,
+						lplr.Character.Humanoid.Position,
+						Vector3.new(0,5,0),
+						httpService:GenerateGUID(false),
+						{
+							shotId = httpService:GenerateGUID(false),
+							drawDurationSec = 1
+						},
+						workspace:GetServerTimeNow() - 0.045
+					)
+				end)
+
+				vape:CreateNotification('BDAFR', 'funny happen! lel', 6)
+				BDAFR:Toggle()
+			end
         end
     })
     for i in bedwars.ProjectileMeta do
@@ -10952,4 +10981,3 @@ run(function()
         List = list,
     })
 end)
-
