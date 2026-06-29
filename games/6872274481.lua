@@ -10929,7 +10929,7 @@ run(function()
                     tostring(typ.Value),
                     lplr.Character.HumanoidRootPart.Position,
                     lplr.Character.HumanoidRootPart.Position,
-                    Vector3.new(0,5,0)
+                    Vector3.new(0,5,0),
                     httpService:GenerateGUID(false),
                     {
                         shotId = httpService:GenerateGUID(false),
@@ -10952,3 +10952,4 @@ run(function()
         List = list,
     })
 end)
+
