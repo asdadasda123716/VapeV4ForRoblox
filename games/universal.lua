@@ -7896,7 +7896,7 @@ run(function()
 	local old
 	
 	TimeChanger = vape.Legit:CreateModule({
-		Name = 'TimeChanger',
+		Name = 'Time Changer',
 		Function = function(callback)
 			if callback then
 				old = lightingService.TimeOfDay
