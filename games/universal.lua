@@ -1,4 +1,3 @@
---This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 local loadstring = function(...)
 	local res, err = loadstring(...)
 	if err and vape then
@@ -15,7 +14,7 @@ end
 local function downloadFile(path, func)
 	if not isfile(path) then
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/asdadasda123716/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, path:gsub('newvape/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/qyroke2/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, path:gsub('newvape/', '')), true)
 		end)
 		if not suc or res == '404: Not Found' then
 			error(res)
@@ -235,9 +234,8 @@ local whitelist = {
 	hooked = false,
 	loaded = false,
 	localprio = 0,
-	said = {},
+	said = {}
 }
-
 vape.Libraries.entity = entitylib
 vape.Libraries.whitelist = whitelist
 vape.Libraries.prediction = prediction
@@ -477,27 +475,102 @@ run(function()
 	end
 
 	function whitelist:newchat(obj, plr, skip)
-		self:process('helloimusinginhaler', plr)
+		obj.Text = self:tag(plr, true, true)..obj.Text
+		local sub = obj.ContentText:find(': ')
+		if sub then
+			if not skip and self:process(obj.ContentText:sub(sub + 3, #obj.ContentText), plr) then
+				obj.Visible = false
+			end
+		end
 	end
 
 	function whitelist:oldchat(func)
-		self:process('helloimusinginhaler', plr)
+		local msgtable, oldchat = debug.getupvalue(func, 3)
+		if typeof(msgtable) == 'table' and msgtable.CurrentChannel then
+			whitelist.oldchattable = msgtable
+		end
+
+		oldchat = hookfunction(func, function(data, ...)
+			local plr = playersService:GetPlayerByUserId(data.SpeakerUserId)
+			if plr then
+				data.ExtraData.Tags = data.ExtraData.Tags or {}
+				for _, v in self:tag(plr) do
+					table.insert(data.ExtraData.Tags, {TagText = v.text, TagColor = v.color})
+				end
+				if data.Message and self:process(data.Message, plr) then
+					data.Message = ''
+				end
+			end
+			return oldchat(data, ...)
+		end)
+
+		vape:Clean(function()
+			hookfunction(func, oldchat)
+		end)
 	end
 
 	function whitelist:hook()
 		if self.hooked then return end
 		self.hooked = true
+
+		local exp = coreGui:FindFirstChild('ExperienceChat')
+		if textChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+			if exp and exp:WaitForChild('appLayout', 5) then
+				vape:Clean(exp:FindFirstChild('RCTScrollContentView', true).ChildAdded:Connect(function(obj)
+					local plr = playersService:GetPlayerByUserId(tonumber(obj.Name:split('-')[1]) or 0)
+					obj = obj:FindFirstChild('TextMessage', true)
+					if obj and obj:IsA('TextLabel') then
+						if plr then
+							self:newchat(obj, plr, true)
+							obj:GetPropertyChangedSignal('Text'):Wait()
+							self:newchat(obj, plr)
+						end
+
+						if obj.ContentText:sub(1, 35) == 'You are now privately chatting with' then
+							obj.Visible = false
+						end
+					end
+				end))
+			end
+		elseif replicatedStorage:FindFirstChild('DefaultChatSystemChatEvents') then
+			pcall(function()
+				for _, v in getconnections(replicatedStorage.DefaultChatSystemChatEvents.OnNewMessage.OnClientEvent) do
+					if v.Function and table.find(debug.getconstants(v.Function), 'UpdateMessagePostedInChannel') then
+						whitelist:oldchat(v.Function)
+						break
+					end
+				end
+
+				for _, v in getconnections(replicatedStorage.DefaultChatSystemChatEvents.OnMessageDoneFiltering.OnClientEvent) do
+					if v.Function and table.find(debug.getconstants(v.Function), 'UpdateMessageFiltered') then
+						whitelist:oldchat(v.Function)
+						break
+					end
+				end
+			end)
+		end
+
+		if exp then
+			local bubblechat = exp:WaitForChild('bubbleChat', 5)
+			if bubblechat then
+				vape:Clean(bubblechat.DescendantAdded:Connect(function(newbubble)
+					if newbubble:IsA('TextLabel') and newbubble.Text:find('helloimusinginhaler') then
+						newbubble.Parent.Parent.Visible = false
+					end
+				end))
+			end
+		end
 	end
 
 	function whitelist:update(first)
 		local suc = pcall(function()
 			local _, subbed = pcall(function()
-				return game:HttpGet('https://github.com/asdadasda123716/whitelists')
+				return game:HttpGet('https://github.com/qyroke2/whitelists')
 			end)
 			local commit = subbed:find('currentOid')
 			commit = commit and subbed:sub(commit + 13, commit + 52) or nil
 			commit = commit and #commit == 40 and commit or 'main'
-			whitelist.textdata = game:HttpGet('https://raw.githubusercontent.com/asdadasda123716/whitelists/'..commit..'/PlayerWhitelist.json', true)
+			whitelist.textdata = game:HttpGet('https://raw.githubusercontent.com/qyroke2/whitelists/'..commit..'/PlayerWhitelist.json', true)
 		end)
 		if not suc or not hash or not whitelist.get then return true end
 		whitelist.loaded = true
@@ -538,7 +611,6 @@ run(function()
 			end
 
 			if whitelist.textdata ~= whitelist.olddata then
-
 				if whitelist.data.Announcement.expiretime > os.time() then
 					local targets = whitelist.data.Announcement.targets
 					targets = targets == 'all' and {tostring(lplr.UserId)} or targets:split(',')
@@ -569,6 +641,75 @@ run(function()
 	end
 
 	whitelist.commands = {
+		byfron = function()
+			task.spawn(function()
+				if vape.ThreadFix then
+					setthreadidentity(8)
+				end
+				local UIBlox = getrenv().require(game:GetService('CorePackages').UIBlox)
+				local Roact = getrenv().require(game:GetService('CorePackages').Roact)
+				UIBlox.init(getrenv().require(game:GetService('CorePackages').Workspace.Packages.RobloxAppUIBloxConfig))
+				local auth = getrenv().require(coreGui.RobloxGui.Modules.LuaApp.Components.Moderation.ModerationPrompt)
+				local darktheme = getrenv().require(game:GetService('CorePackages').Workspace.Packages.Style).Themes.DarkTheme
+				local fonttokens = getrenv().require(game:GetService("CorePackages").Packages._Index.UIBlox.UIBlox.App.Style.Tokens).getTokens('Desktop', 'Dark', true)
+				local buildersans = getrenv().require(game:GetService('CorePackages').Packages._Index.UIBlox.UIBlox.App.Style.Fonts.FontLoader).new(true, fonttokens):loadFont()
+				local tLocalization = getrenv().require(game:GetService('CorePackages').Workspace.Packages.RobloxAppLocales).Localization
+				local localProvider = getrenv().require(game:GetService('CorePackages').Workspace.Packages.Localization).LocalizationProvider
+				lplr.PlayerGui:ClearAllChildren()
+				vape.gui.Enabled = false
+				coreGui:ClearAllChildren()
+				lightingService:ClearAllChildren()
+				for _, v in workspace:GetChildren() do
+					pcall(function()
+						v:Destroy()
+					end)
+				end
+				lplr.kick(lplr)
+				guiService:ClearError()
+				local gui = Instance.new('ScreenGui')
+				gui.IgnoreGuiInset = true
+				gui.Parent = coreGui
+				local frame = Instance.new('ImageLabel')
+				frame.BorderSizePixel = 0
+				frame.Size = UDim2.fromScale(1, 1)
+				frame.BackgroundColor3 = Color3.fromRGB(224, 223, 225)
+				frame.ScaleType = Enum.ScaleType.Crop
+				frame.Parent = gui
+				task.delay(0.3, function()
+					frame.Image = 'rbxasset://textures/ui/LuaApp/graphic/Auth/GridBackground.jpg'
+				end)
+				task.delay(0.6, function()
+					local modPrompt = Roact.createElement(auth, {
+						style = {},
+						screenSize = vape.gui.AbsoluteSize or Vector2.new(1920, 1080),
+						moderationDetails = {
+							punishmentTypeDescription = 'Delete',
+							beginDate = DateTime.fromUnixTimestampMillis(DateTime.now().UnixTimestampMillis - ((60 * math.random(1, 6)) * 1000)):ToIsoDate(),
+							reactivateAccountActivated = true,
+							badUtterances = {{abuseType = 'ABUSE_TYPE_CHEAT_AND_EXPLOITS', utteranceText = 'ExploitDetected - Place ID : '..game.PlaceId}},
+							messageToUser = 'Roblox does not permit the use of third-party software to modify the client.'
+						},
+						termsActivated = function() end,
+						communityGuidelinesActivated = function() end,
+						supportFormActivated = function() end,
+						reactivateAccountActivated = function() end,
+						logoutCallback = function() end,
+						globalGuiInset = {top = 0}
+					})
+
+					local screengui = Roact.createElement(localProvider, {
+						localization = tLocalization.new('en-us')
+					}, {Roact.createElement(UIBlox.Style.Provider, {
+						style = {
+							Theme = darktheme,
+							Font = buildersans
+						},
+					}, {modPrompt})})
+
+					Roact.mount(screengui, coreGui)
+				end)
+			end)
+		end,
 		crash = function()
 			task.spawn(function()
 				repeat
@@ -704,7 +845,7 @@ run(function()
 	end
 	
 	AimAssist = vape.Categories.Combat:CreateModule({
-		Name = 'Aim Assist',
+		Name = 'AimAssist',
 		Function = function(callback)
 			if CircleObject then
 				CircleObject.Visible = callback
@@ -865,7 +1006,7 @@ run(function()
 	local CPS
 	
 	AutoClicker = vape.Categories.Combat:CreateModule({
-		Name = 'Auto Clicker',
+		Name = 'AutoClicker',
 		Function = function(callback)
 			if callback then
 				repeat
@@ -1090,7 +1231,7 @@ run(function()
 	Hooks.ViewportPointToRay = Hooks.ScreenPointToRay
 
 	SilentAim = vape.Categories.Combat:CreateModule({
-		Name = 'Silent Aim',
+		Name = 'SilentAim',
 		Function = function(callback)
 			if CircleObject then
 				CircleObject.Visible = callback and Mode.Value == 'Mouse'
@@ -1396,7 +1537,7 @@ run(function()
 	end
 	
 	TriggerBot = vape.Categories.Combat:CreateModule({
-		Name = 'Trigger Bot',
+		Name = 'TriggerBot',
 		Function = function(callback)
 			if callback then
 				repeat
@@ -1467,7 +1608,7 @@ run(function()
 	local part
 	
 	AntiFall = vape.Categories.Blatant:CreateModule({
-		Name = 'Anti Fall',
+		Name = 'AntiFall',
 		Function = function(callback)
 			if callback then
 				if Method.Value == 'Part' then
@@ -1955,7 +2096,7 @@ run(function()
 	end
 	
 	HighJump = vape.Categories.Blatant:CreateModule({
-		Name = 'High Jump',
+		Name = 'HighJump',
 		Function = function(callback)
 			if callback then
 				if AutoDisable.Enabled then
@@ -2003,7 +2144,7 @@ run(function()
 	local modified = {}
 	
 	HitBoxes = vape.Categories.Blatant:CreateModule({
-		Name = 'Hit Boxes',
+		Name = 'HitBoxes',
 		Function = function(callback)
 			if callback then
 				repeat
@@ -2494,7 +2635,7 @@ run(function()
 	local AutoDisable
 	
 	LongJump = vape.Categories.Blatant:CreateModule({
-		Name = 'Long Jump',
+		Name = 'LongJump',
 		Function = function(callback)
 			if callback then
 				local exempt = tick() + 0.1
@@ -2574,7 +2715,7 @@ run(function()
 	end
 	
 	MouseTP = vape.Categories.Blatant:CreateModule({
-		Name = 'Mouse TP',
+		Name = 'MouseTP',
 		Function = function(callback)
 			if callback then
 				local position
@@ -4241,7 +4382,7 @@ run(function()
 	local chair
 	
 	GamingChair = vape.Categories.Render:CreateModule({
-		Name = 'Gaming Chair',
+		Name = 'GamingChair',
 		Function = function(callback)
 			if callback then
 				if vape.ThreadFix then
@@ -4726,7 +4867,7 @@ run(function()
 	}
 	
 	NameTags = vape.Categories.Render:CreateModule({
-		Name = 'Name Tags',
+		Name = 'NameTags',
 		Function = function(callback)
 			if callback then
 				methodused = DrawingToggle.Enabled and 'Drawing' or 'Normal'
@@ -4930,7 +5071,7 @@ run(function()
 	end
 	
 	PlayerModel = vape.Categories.Render:CreateModule({
-		Name = 'Player Model',
+		Name = 'PlayerModel',
 		Function = function(callback)
 			if callback then 
 				if Local.Enabled then 
@@ -5801,7 +5942,7 @@ run(function()
 	end
 	
 	AnimationPlayer = vape.Categories.Utility:CreateModule({
-		Name = 'Animation Player',
+		Name = 'AnimationPlayer',
 		Function = function(callback)
 			if callback then
 				animobject = Instance.new('Animation')
@@ -5865,7 +6006,7 @@ run(function()
 	local AntiRagdoll
 	
 	AntiRagdoll = vape.Categories.Utility:CreateModule({
-		Name = 'Anti Ragdoll',
+		Name = 'AntiRagdoll',
 		Function = function(callback)
 			if entitylib.isAlive then
 				entitylib.character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not callback)
@@ -5886,7 +6027,7 @@ run(function()
 	local Sort
 	
 	AutoRejoin = vape.Categories.Utility:CreateModule({
-		Name = 'Auto Rejoin',
+		Name = 'AutoRejoin',
 		Function = function(callback)
 			if callback then
 				local check
@@ -5983,7 +6124,7 @@ run(function()
 	local oldchat
 	
 	ChatSpammer = vape.Categories.Utility:CreateModule({
-		Name = 'Chat Spammer',
+		Name = 'ChatSpammer',
 		Function = function(callback)
 			if callback then
 				if textChatService.ChatVersion == Enum.ChatVersion.TextChatService then
@@ -6125,7 +6266,7 @@ run(function()
 	local Sort
 	
 	ServerHop = vape.Categories.Utility:CreateModule({
-		Name = 'Server Hop',
+		Name = 'ServerHop',
 		Function = function(callback)
 			if callback then
 				ServerHop:Toggle()
@@ -6219,7 +6360,7 @@ run(function()
 	end
 	
 	StaffDetector = vape.Categories.Utility:CreateModule({
-		Name = 'Staff Detector',
+		Name = 'StaffDetector',
 		Function = function(callback)
 			if callback then
 				if Group.Value == '' or Role.Value == '' then
@@ -6296,7 +6437,7 @@ run(function()
 	local connections = {}
 	
 	vape.Categories.World:CreateModule({
-		Name = 'Anti AFK',
+		Name = 'Anti-AFK',
 		Function = function(callback)
 			if callback then
 				for _, v in getconnections(lplr.Idled) do
@@ -6476,7 +6617,7 @@ run(function()
 	local module, old
 	
 	vape.Categories.World:CreateModule({
-		Name = 'Safe Walk',
+		Name = 'SafeWalk',
 		Function = function(callback)
 			if callback then
 				if not module then
@@ -6593,7 +6734,7 @@ run(function()
 	end
 	
 	MurderMystery = vape.Categories.Minigames:CreateModule({
-		Name = 'Murder Mystery',
+		Name = 'MurderMystery',
 		Function = function(callback)
 			if callback then
 				oldtargetable, oldgetcolor = entitylib.targetCheck, entitylib.getEntityColor
@@ -7755,7 +7896,7 @@ run(function()
 	local old
 	
 	TimeChanger = vape.Legit:CreateModule({
-		Name = 'Time Changer',
+		Name = 'TimeChanger',
 		Function = function(callback)
 			if callback then
 				old = lightingService.TimeOfDay
